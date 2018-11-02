@@ -1,3 +1,14 @@
+To run application:
+
+1) Create a "build" folder in the root directory
+2) cd into the "build" folder
+3) Run the following, replace DCUDA_TOOLKIT_ROOT_DIR with the path to your toolkit:
+
+`cmake -G "Visual Studio 15 2017 Win64" -DCUDA_TOOLKIT_ROOT_DIR="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v9.2" -T v140,cuda=9.2 ..`
+
+4) In the "build" folder you will see a .sln project, open that in Visual Studio
+
+
 Initialization Steps
 
 1. Setup OpenGL, get pbo working so we can fill it in CUDA
