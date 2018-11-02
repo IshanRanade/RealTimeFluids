@@ -84,6 +84,8 @@ cuda_add_executable(${CMAKE_PROJECT_NAME}
 	"src/app.h"
 	"src/app.cpp"
 	"src/main.cu"
+	"src/shaders/basic.vertex.glsl"
+	"src/shaders/basic.frag.glsl"
     )
 
 target_link_libraries(${CMAKE_PROJECT_NAME}
