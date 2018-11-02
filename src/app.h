@@ -2,7 +2,7 @@
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
-#include <gl\gl.h> 
+#include <gl/gl.h> 
 
 #include <cstdlib>
 #include <ctime>
@@ -15,7 +15,6 @@
 #include <cuda_runtime.h>
 #include <glm/glm.hpp>
 
-void keyCallback(GLFWwindow *window, int key, int scancode, int action, int mods);
 
 struct Camera {
 	float scale = 1.0f;
@@ -40,10 +39,14 @@ public:
 	Camera *camera;
 
 	void start();
-	void init();
 	void initGL();
-	void mainLoop();
 	std::string readFileAsString(std::string filename);
 
 	void draw();
+
+	enum ControlState { NONE = 0, ROTATE, TRANSLATE };
+	ControlState mouseState = NONE;
+
+	double lastx = (double)width / 2;
+	double lasty = (double)height / 2;
 };

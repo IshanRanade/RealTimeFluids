@@ -4,21 +4,13 @@
 
 App::App() {
 	camera = new Camera();
-}
-
-void App::start() {
-	init();
-	mainLoop();
-}
-
-void App::init() {
+	
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_COMPAT_PROFILE);
 	window = glfwCreateWindow(width, height, "Real Time Fluid Sim", NULL, NULL);
 	glfwMakeContextCurrent(window);
-	glfwSetKeyCallback(window, keyCallback);
 
 	initGL();
 }
@@ -107,7 +99,7 @@ void App::initGL() {
 	glBindVertexArray(0);
 }
 
-void App::mainLoop() {
+void App::start() {
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
 
@@ -122,15 +114,9 @@ void App::mainLoop() {
 	glfwTerminate();
 }
 
-void keyCallback(GLFWwindow *window, int key, int scancode, int action, int mods) {
-	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
-		glfwSetWindowShouldClose(window, GL_TRUE);
-	}
-}
-
 void App::draw() {
 	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-	glClear(GL_COLOR_BUFFER_BIT);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	glUseProgram(shaderProgram);
 	glBindVertexArray(VAO);
@@ -153,5 +139,4 @@ std::string App::readFileAsString(std::string filename) {
 		std::cout << "file does not exist" << std::endl;
 		return "";
 	}
-	
 }
