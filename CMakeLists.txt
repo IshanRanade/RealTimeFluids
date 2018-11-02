@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.1)
 
-project(cis565_rasterizer)
+project(fluidsim)
 
 # Set up include and lib paths
 include_directories(.)
