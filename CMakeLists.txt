@@ -11,20 +11,11 @@ list(APPEND CUDA_NVCC_FLAGS_DEBUG -G -g)
 set(CUDA_ATTACH_VS_BUILD_RULE_TO_CUDA_FILE ON)
 set(CUDA_SEPARABLE_COMPILATION ON)
 
-# Include all the folders that contain code
-# include_directories(include)
-# include_directories(src)
-# include_directories(src/io)
-# include_directories(src/ui)
-# include_directories(src/pathtracing)
-# include_directories(src/pathtracing/raytracing)
-# include_directories(src/pathtracing/scene)
-# include_directories(src/pathtracing/scene/geometry)
-
 find_package(OpenGL)
 
 set(CPP_SOURCES
-
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/globals.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/globals.cpp
 )
 
 set(CUDA_SOURCES
@@ -34,4 +25,9 @@ set(CUDA_SOURCES
 add_executable(fluidsim
     ${CUDA_SOURCES}
     ${CPP_SOURCES}
+)
+
+target_include_directories(fluidsim PUBLIC
+	include
+	src
 )
