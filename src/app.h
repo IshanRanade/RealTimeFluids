@@ -13,6 +13,8 @@
 #include <cuda_runtime.h>
 #include <glm/glm.hpp>
 
+void keyCallback(GLFWwindow *window, int key, int scancode, int action, int mods);
+
 class App {
 public:
 	int width = 800;
