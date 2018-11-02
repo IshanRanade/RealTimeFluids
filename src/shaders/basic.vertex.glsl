@@ -1,3 +1,5 @@
+#version 400
+
 uniform mat4 u_Model;
 uniform mat3 u_ModelInvTr;
 uniform mat4 u_View;

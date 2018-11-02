@@ -1,6 +1,12 @@
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 3.12)
 
-project(fluidsim)
+project(fluidsim CXX CUDA)
+
+set (CMAKE_CXX_STANDARD 11)
+
+set(CUDA_NVCC_FLAGS
+    ${CUDA_NVCC_FLAGS};
+    -dc arch=sm_60)
 
 # Set up include and lib paths
 include_directories(.)
@@ -36,10 +42,8 @@ set(CORELIBS
     "${GLEW_LIBRARY}"
     )
 
-# Enable C++11 for host code
-set(CMAKE_CXX_STANDARD 11)
-
 # Set up different build configurations
+#[[
 set(CMAKE_CONFIGURATION_TYPES Debug;RelWithDebInfo;Release
     CACHE STRING "Set configuration types" FORCE)
 set(CUDA_PROPAGATE_HOST_FLAGS OFF)
@@ -56,6 +60,7 @@ if (WIN32)
     set(CMAKE_CXX_FLAGS_RELWITHDEBINFO        "/O2 /Zi")
     set(CMAKE_CXX_FLAGS_RELEASE               "/O2 /D NDEBUG")
 endif()
+]]
 
 # OS X options
 if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
@@ -74,12 +79,12 @@ if (WIN32)
 endif()
 
 # CUDA linker options
-find_package(Threads REQUIRED)
-find_package(CUDA 8.0 REQUIRED)
+#find_package(Threads REQUIRED)
+#find_package(CUDA 8.0 REQUIRED)
 set(CUDA_ATTACH_VS_BUILD_RULE_TO_CUDA_FILE ON)
 set(CUDA_SEPARABLE_COMPILATION ON)
 
-cuda_add_executable(${CMAKE_PROJECT_NAME}
+add_executable(${CMAKE_PROJECT_NAME}
 	"src/main.cpp"
 	"src/app.h"
 	"src/app.cpp"
