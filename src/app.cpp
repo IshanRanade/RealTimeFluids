@@ -29,7 +29,7 @@ void App::runSim() {
 	size_t size;
 	cudaGraphicsResourceGetMappedPointer(&vbo_dptr, &size, resource);
 
-	fillVBOs(vbo_dptr);
+	fillVBOsWithMarkerParticles(vbo_dptr);
 
 	cudaGraphicsUnmapResources(1, &resource, NULL);
 	cudaGraphicsUnregisterResource(resource);
@@ -88,20 +88,8 @@ void App::initGL() {
 	glDeleteShader(vertexShader);
 	glDeleteShader(fragmentShader);
 
-
-	float data[] = {
-		-0.5f, -0.5f, 0.0f,
-		1, 0, 0,
-		0.5f,  0.5f, 0.0f,
-		1,0,0,
-		0.5f, -0.5f, 0.0f,
-		1,0,0,
-		-0.5f,  0.5f, 0.0f,
-		1,0,0
-	};
-
 	std::vector<int> indices;
-	for (int i = 0; i < NUM_CELLS; ++i) {
+	for (int i = 0; i < NUM_MARKER_PARTICLES; ++i) {
 		indices.push_back(i);
 	}
 
@@ -115,7 +103,7 @@ void App::initGL() {
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(int), &*indices.begin(), GL_STATIC_DRAW);
 
 	glBindBuffer(GL_ARRAY_BUFFER, VBO);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(data), data, GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 6 * NUM_MARKER_PARTICLES, NULL, GL_STATIC_DRAW);
 
 	GLuint vsPosLocation = glGetAttribLocation(shaderProgram, "vs_Pos");
 	glEnableVertexAttribArray(vsPosLocation);
@@ -172,7 +160,7 @@ void App::draw() {
 
 	glBindBuffer(GL_ARRAY_BUFFER, VBO);
 	glBindVertexArray(VAO);
-	glDrawElements(GL_POINTS, 4, GL_UNSIGNED_INT, 0);
+	glDrawElements(GL_POINTS, NUM_MARKER_PARTICLES, GL_UNSIGNED_INT, 0);
 
 	glfwSwapBuffers(window);
 }
