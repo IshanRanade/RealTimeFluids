@@ -1,12 +1,8 @@
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.1)
 
-project(fluidsim CXX CUDA)
+project(cis565_rasterizer)
 
-set (CMAKE_CXX_STANDARD 11)
-
-set(CUDA_NVCC_FLAGS
-    ${CUDA_NVCC_FLAGS};
-    -dc arch=sm_60)
+set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
 
 # Set up include and lib paths
 include_directories(.)
@@ -42,28 +38,26 @@ set(CORELIBS
     "${GLEW_LIBRARY}"
     )
 
+# Enable C++11 for host code
+set(CMAKE_CXX_STANDARD 11)
+
 # Set up different build configurations
-#[[
 set(CMAKE_CONFIGURATION_TYPES Debug;RelWithDebInfo;Release
-    CACHE STRING "Set configuration types" FORCE)]]
-list(APPEND CUDA_NVCC_FLAGS_DEBUG -G -g)
-set(CUDA_ATTACH_VS_BUILD_RULE_TO_CUDA_FILE ON)
-set(CUDA_SEPARABLE_COMPILATION ON)
+    CACHE STRING "Set configuration types" FORCE)
 set(CUDA_PROPAGATE_HOST_FLAGS OFF)
-#[[set(CMAKE_CXX_FLAGS_DEBUG                 "-O0 -g")
+set(CMAKE_CXX_FLAGS_DEBUG                 "-O0 -g")
 set(CMAKE_CXX_FLAGS_RELWITHDEBINFO        "-O2 -g")
-set(CMAKE_CXX_FLAGS_RELEASE               "-O3    -DNDEBUG")]]
+set(CMAKE_CXX_FLAGS_RELEASE               "-O3    -DNDEBUG")
 list(APPEND CUDA_NVCC_FLAGS_DEBUG          -O0 -g -G)
 list(APPEND CUDA_NVCC_FLAGS_RELWITHDEBINFO -O2 -g -lineinfo)
 list(APPEND CUDA_NVCC_FLAGS_RELEASE        -O3    -DNDEBUG)
-#[[if (WIN32)
+if (WIN32)
     set(CUDA_PROPAGATE_HOST_FLAGS ON)
     set(CMAKE_CXX_FLAGS                       "/MD /EHsc /D _CRT_SECURE_NO_WARNINGS")
     set(CMAKE_CXX_FLAGS_DEBUG                 "/Od /Zi")
     set(CMAKE_CXX_FLAGS_RELWITHDEBINFO        "/O2 /Zi")
     set(CMAKE_CXX_FLAGS_RELEASE               "/O2 /D NDEBUG")
 endif()
-]]
 
 # OS X options
 if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
@@ -82,22 +76,28 @@ if (WIN32)
 endif()
 
 # CUDA linker options
-#find_package(Threads REQUIRED)
-#find_package(CUDA 8.0 REQUIRED)
+find_package(Threads REQUIRED)
+find_package(CUDA 8.0 REQUIRED)
 set(CUDA_ATTACH_VS_BUILD_RULE_TO_CUDA_FILE ON)
 set(CUDA_SEPARABLE_COMPILATION ON)
 
-add_executable(${CMAKE_PROJECT_NAME}
-	"src/main.cpp"
-	"src/app.h"
+#add_subdirectory(stream_compaction)  # TODO: uncomment if using your own stream compaction
+cuda_add_library(src
+    "src/app.h"
 	"src/app.cpp"
 	"src/fluid.h"
 	"src/fluid.cu"
 	"src/shaders/basic.vertex.glsl"
 	"src/shaders/basic.frag.glsl"
+    OPTIONS -arch=sm_60
+    )
+
+cuda_add_executable(${CMAKE_PROJECT_NAME}
+    "src/main.cpp"
     )
 
 target_link_libraries(${CMAKE_PROJECT_NAME}
+    src
     #stream_compaction  # TODO: uncomment if using your own stream compaction
     ${CORELIBS}
     )
