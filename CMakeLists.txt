@@ -88,7 +88,8 @@ add_executable(${CMAKE_PROJECT_NAME}
 	"src/main.cpp"
 	"src/app.h"
 	"src/app.cpp"
-	"src/main.cu"
+	"src/fluid.h"
+	"src/fluid.cu"
 	"src/shaders/basic.vertex.glsl"
 	"src/shaders/basic.frag.glsl"
     )

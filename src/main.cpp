@@ -3,7 +3,6 @@
 App *app;
 
 void keyCallback(GLFWwindow *window, int key, int scancode, int action, int mods) {
-	std::cout << "key" << std::endl;
 	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
 		glfwSetWindowShouldClose(app->window, GL_TRUE);
 	}
