@@ -34,20 +34,13 @@ __device__ int getCellCompressedIndex(int x, int y, int z, int GRID_X, int GRID_
 	return z * GRID_X * GRID_Y + y * GRID_X + x;
 }
 
-__device__ void getCellUncompressedIndex(int index, int *x, int *y, int *z, int GRID_X, int GRID_Y, int GRID_Z) {
-	*z = index / (GRID_X * GRID_Y);
-	index -= (*z * GRID_X * GRID_Y);
-	*y = index / GRID_X;
-	*x = index % GRID_X;
-}
+__device__ glm::vec3 getCellUncompressedCoordinates(int index, int GRID_X, int GRID_Y, int GRID_Z) {
+	int z = index / (GRID_X * GRID_Y);
+	index -= (z * GRID_X * GRID_Y);
+	int y = index / GRID_X;
+	int x = index % GRID_X;
 
-__global__ void fillGridCells(int n, GridCell *cells) {
-	int index = blockIdx.x * blockDim.x + threadIdx.x;
-
-	if (index < n) {
-		GridCell &cell = cells[index];
-		cell.worldPosition = glm::vec3(0, 0, 0);
-	}
+	return glm::vec3(x, y, z);
 }
 
 __global__ void fillVBOData(int n, void *vbo, MarkerParticle *particles) {
@@ -70,8 +63,40 @@ __global__ void fillVBOData(int n, void *vbo, MarkerParticle *particles) {
 	}
 }
 
-__global__ void setAllGridCellsToNoneCellType(int n, GridCell *cells) {
-	
+__global__ void initializeGridCells(int n, GridCell *cells, int GRID_X, int GRID_Y, int GRID_Z, float CELL_WIDTH) {
+	int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+	if (index < n) {
+		int *x;
+		int *y;
+		int *z;
+		glm::vec3 coords = getCellUncompressedCoordinates(index, GRID_X, GRID_Y, GRID_Z);
+
+		GridCell &cell = cells[index];
+		cell.worldPosition = glm::vec3(coords.x * CELL_WIDTH, coords.y * CELL_WIDTH, coords.z * CELL_WIDTH);
+	}
+}
+
+__global__ void setAllGridCellsToAir(int n, GridCell *cells, CellType airType) {
+	int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+	if (index < n) {
+		GridCell &cell = cells[index];
+		cell.cellType = airType;
+	}
+}
+
+__global__ void setGridCellsWithMarkerParticleToFluid(int n, GridCell *cells, MarkerParticle *particles, CellType fluidType, int GRID_X, int GRID_Y, int GRID_Z, float CELL_WIDTH) {
+	int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+	if (index < n) {
+		MarkerParticle &particle = particles[index];
+
+		int compressedCellIndex = getCellCompressedIndex((int)particle.worldPosition.x / CELL_WIDTH, (int)particle.worldPosition.x / CELL_WIDTH, (int)particle.worldPosition.x / CELL_WIDTH, GRID_X, GRID_Y, GRID_Z);
+		
+		GridCell &cell = cells[compressedCellIndex];
+		cell.cellType = fluidType;
+	}
 }
 
 void fillVBOsWithMarkerParticles(void *vbo) {
@@ -85,6 +110,7 @@ __global__ void generateRandomWorldPositionsForParticles(int n, MarkerParticle *
 	int index = blockIdx.x * blockDim.x + threadIdx.x;
 
 	if (index < n) {
+		// TODO: Fix these random generators
 		thrust::default_random_engine rngX = thrust::default_random_engine(index | (index << 22));
 		thrust::default_random_engine rngY = thrust::default_random_engine(index | (index << 15) ^ index);
 		thrust::default_random_engine rngZ = thrust::default_random_engine(index ^ (index * 13));
@@ -99,6 +125,29 @@ __global__ void generateRandomWorldPositionsForParticles(int n, MarkerParticle *
 	}
 }
 
+__device__ float getInterpolatedValue(float x, float y, float z, int componentIndex) {
+
+}
+
+__device__ glm::vec3 getVelocity(float x, float y, float z) {
+
+}
+
+__device__ glm::vec3 traceParticle(float x, float y, float z, float t) {
+
+}
+
+__global__ void backwardsParticleTrace(int n, GridCell *cells, int GRID_X, int GRID_Y, int GRID_Z) {
+	int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+	if (index < n) {
+		GridCell &cell = cells[index];
+
+		// For now just use simple Euler
+		//cell.velocity =	
+	}
+}
+
 void initSim() {
 	// Allocate space for all of the grid cells
 	cudaMalloc(&dev_gridCells, NUM_CELLS * sizeof(GridCell));
@@ -109,13 +158,26 @@ void initSim() {
 	cudaMemset(dev_markerParticles, 0, NUM_MARKER_PARTICLES * sizeof(MarkerParticle));
 
 	// Create random world positions for all of the particles
-	int particlesBlocks = (NUM_MARKER_PARTICLES + blockSize - 1) / blockSize;
-	generateRandomWorldPositionsForParticles<<<particlesBlocks, blockSize>>>(NUM_MARKER_PARTICLES, dev_markerParticles, GRID_X, GRID_Y, GRID_Z, CELL_WIDTH);
+	generateRandomWorldPositionsForParticles<<<BLOCKS_PARTICLES, blockSize>>>(NUM_MARKER_PARTICLES, dev_markerParticles, GRID_X, GRID_Y, GRID_Z, CELL_WIDTH);
 	checkCUDAError("generating initial world positions for marker particles failed");
 	cudaDeviceSynchronize();
 
-	//int cellBlocks = (NUM_CELLS + blockSize - 1) / blockSize;
-	//fillGridCells<<<cellBlocks, blockSize>>>(NUM_CELLS, dev_gridCells);
-	//checkCUDAError("initializing grid cells failed");
-	//cudaDeviceSynchronize();
+	// Initialize the grid cells
+	initializeGridCells<<<BLOCKS_CELLS, blockSize>>>(NUM_CELLS, dev_gridCells, GRID_X, GRID_Y, GRID_Z, CELL_WIDTH);
+	checkCUDAError("initializing the grid cells failed");
+	cudaDeviceSynchronize();
+}
+
+void iterateSim() {
+	// Make all the cells temporarily air cells
+	setAllGridCellsToAir<<<BLOCKS_CELLS, blockSize>>>(NUM_CELLS, dev_gridCells, AIR);
+	checkCUDAError("marking all cells as air cells failed");
+	cudaDeviceSynchronize();
+
+	// Mark all cells with a marker particle as a fluid cell
+	setGridCellsWithMarkerParticleToFluid<<<BLOCKS_PARTICLES, blockSize>>>(NUM_MARKER_PARTICLES, dev_gridCells, dev_markerParticles, FLUID, GRID_X, GRID_Y, GRID_Z, CELL_WIDTH);
+	checkCUDAError("marking all cells with a marker particle as fluid cells failed");
+	cudaDeviceSynchronize();
+
+	// Appl convection using a backwards particle trace
 }

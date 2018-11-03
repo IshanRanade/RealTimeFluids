@@ -29,6 +29,7 @@ void App::runSim() {
 	size_t size;
 	cudaGraphicsResourceGetMappedPointer(&vbo_dptr, &size, resource);
 
+	iterateSim();
 	fillVBOsWithMarkerParticles(vbo_dptr);
 
 	cudaGraphicsUnmapResources(1, &resource, NULL);
