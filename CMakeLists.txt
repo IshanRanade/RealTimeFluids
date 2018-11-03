@@ -45,15 +45,18 @@ set(CORELIBS
 # Set up different build configurations
 #[[
 set(CMAKE_CONFIGURATION_TYPES Debug;RelWithDebInfo;Release
-    CACHE STRING "Set configuration types" FORCE)
+    CACHE STRING "Set configuration types" FORCE)]]
+list(APPEND CUDA_NVCC_FLAGS_DEBUG -G -g)
+set(CUDA_ATTACH_VS_BUILD_RULE_TO_CUDA_FILE ON)
+set(CUDA_SEPARABLE_COMPILATION ON)
 set(CUDA_PROPAGATE_HOST_FLAGS OFF)
-set(CMAKE_CXX_FLAGS_DEBUG                 "-O0 -g")
+#[[set(CMAKE_CXX_FLAGS_DEBUG                 "-O0 -g")
 set(CMAKE_CXX_FLAGS_RELWITHDEBINFO        "-O2 -g")
-set(CMAKE_CXX_FLAGS_RELEASE               "-O3    -DNDEBUG")
+set(CMAKE_CXX_FLAGS_RELEASE               "-O3    -DNDEBUG")]]
 list(APPEND CUDA_NVCC_FLAGS_DEBUG          -O0 -g -G)
 list(APPEND CUDA_NVCC_FLAGS_RELWITHDEBINFO -O2 -g -lineinfo)
 list(APPEND CUDA_NVCC_FLAGS_RELEASE        -O3    -DNDEBUG)
-if (WIN32)
+#[[if (WIN32)
     set(CUDA_PROPAGATE_HOST_FLAGS ON)
     set(CMAKE_CXX_FLAGS                       "/MD /EHsc /D _CRT_SECURE_NO_WARNINGS")
     set(CMAKE_CXX_FLAGS_DEBUG                 "/Od /Zi")

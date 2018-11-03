@@ -41,6 +41,7 @@ public:
 
 	void start();
 	void initGL();
+	void runSim();
 	std::string readFileAsString(std::string filename);
 
 	glm::mat4 M;

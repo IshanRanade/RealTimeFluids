@@ -1,6 +1,7 @@
 #include "app.h"
 
 #include <windows.h>
+#include <vector>
 
 #include "fluid.h"
 
@@ -19,8 +20,26 @@ App::App() {
 	initSim();
 }
 
+void App::runSim() {
+	void *vbo_dptr = NULL;
+
+	cudaGraphicsResource_t resource = 0;
+	cudaGraphicsGLRegisterBuffer(&resource, VBO, cudaGraphicsRegisterFlagsNone);
+	cudaGraphicsMapResources(1, &resource, NULL);
+	size_t size;
+	cudaGraphicsResourceGetMappedPointer(&vbo_dptr, &size, resource);
+
+	fillVBOs(vbo_dptr);
+
+	cudaGraphicsUnmapResources(1, &resource, NULL);
+	cudaGraphicsUnregisterResource(resource);
+}
+
 void App::initGL() {
 	glewInit();
+
+	glEnable(GL_PROGRAM_POINT_SIZE_EXT);
+	glPointSize(5);
 
 	GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
 	GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
@@ -81,9 +100,10 @@ void App::initGL() {
 		1,0,0
 	};
 
-	unsigned int indices[] = {
-		0, 1, 2, 3
-	};
+	std::vector<int> indices;
+	for (int i = 0; i < NUM_CELLS; ++i) {
+		indices.push_back(i);
+	}
 
 	glGenVertexArrays(1, &VAO);
 	glGenBuffers(1, &VBO);
@@ -92,7 +112,7 @@ void App::initGL() {
 	glBindVertexArray(VAO);
 
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(int), &*indices.begin(), GL_STATIC_DRAW);
 
 	glBindBuffer(GL_ARRAY_BUFFER, VBO);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(data), data, GL_STATIC_DRAW);
@@ -111,6 +131,8 @@ void App::initGL() {
 
 void App::start() {
 	while (!glfwWindowShouldClose(window)) {
+		runSim();
+
 		glfwPollEvents();
 
 		P = glm::frustum<float>(-camera->scale * ((float)width) / ((float)height),

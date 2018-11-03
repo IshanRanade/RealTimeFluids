@@ -21,4 +21,4 @@ static int blockSize = 256;
 static GridCell *dev_gridCells;
 
 void initSim();
-//void fillVBOs
+void fillVBOs(void *vbo);
