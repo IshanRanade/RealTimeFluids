@@ -19,8 +19,8 @@
 
 struct Camera {
 	float scale = 1.0f;
-	float x_trans = 0.0f, y_trans = 0.0f, z_trans = -10.0f;
-	float x_angle = 0.0f, y_angle = 0.0f;
+	float x_trans = 0.07f, y_trans = -4.6f, z_trans = -46.0f;
+	float x_angle = 0.79f, y_angle = -0.76f;
 };
 
 class App {

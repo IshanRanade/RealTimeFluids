@@ -31,7 +31,7 @@ static int GRID_Z = 16;
 static int NUM_CELLS = GRID_X * GRID_Y * GRID_Z;
 
 static float CELL_WIDTH = 1.0;
-static int NUM_MARKER_PARTICLES = 100;
+static int NUM_MARKER_PARTICLES = 10000;
 
 static int blockSize = 256;
 
