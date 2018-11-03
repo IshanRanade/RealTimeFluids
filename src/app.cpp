@@ -103,6 +103,21 @@ void App::start() {
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
 
+		P = glm::frustum<float>(-camera->scale * ((float)width) / ((float)height),
+			camera->scale * ((float)width / (float)height),
+			-camera->scale, camera->scale, 1.0, 1000.0);
+
+		M = glm::mat4();
+
+		V = 
+			glm::translate(glm::mat4(), glm::vec3(camera->x_trans, camera->y_trans, camera->z_trans))
+			* glm::rotate(glm::mat4(), camera->x_angle, glm::vec3(1.0f, 0.0f, 0.0f))
+			* glm::rotate(glm::mat4(), camera->y_angle, glm::vec3(0.0f, 1.0f, 0.0f));
+
+		glm::mat3 MV_normal = glm::transpose(glm::inverse(glm::mat3(V) * glm::mat3(M)));
+		glm::mat4 MV = V * M;
+		MVP = P * MV;
+
 		draw();
 	}
 
@@ -119,6 +134,10 @@ void App::draw() {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	glUseProgram(shaderProgram);
+
+	GLuint uMVP = glGetUniformLocation(shaderProgram, "u_MVP");
+	glUniformMatrix4fv(uMVP, 1, GL_FALSE, &MVP[0][0]);
+
 	glBindVertexArray(VAO);
 	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 

@@ -14,6 +14,7 @@
 #include <cuda_gl_interop.h>
 #include <cuda_runtime.h>
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 
 struct Camera {
@@ -41,6 +42,11 @@ public:
 	void start();
 	void initGL();
 	std::string readFileAsString(std::string filename);
+
+	glm::mat4 M;
+	glm::mat4 V;
+	glm::mat4 P;
+	glm::mat4 MVP;
 
 	void draw();
 
