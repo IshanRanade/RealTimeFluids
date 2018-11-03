@@ -170,6 +170,7 @@ void App::draw() {
 	GLuint uMVP = glGetUniformLocation(shaderProgram, "u_MVP");
 	glUniformMatrix4fv(uMVP, 1, GL_FALSE, &MVP[0][0]);
 
+	glBindBuffer(GL_ARRAY_BUFFER, VBO);
 	glBindVertexArray(VAO);
 	glDrawElements(GL_POINTS, 4, GL_UNSIGNED_INT, 0);
 

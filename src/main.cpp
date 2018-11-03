@@ -57,7 +57,6 @@ void mouseWheelCallback(GLFWwindow* window, double xoffset, double yoffset) {
 int main() {
 	app = new App();
 
-	std::cout << app->window << std::endl;
 	glfwSetKeyCallback(app->window, keyCallback);
 	glfwSetMouseButtonCallback(app->window, mouseButtonCallback);
 	glfwSetCursorPosCallback(app->window, mouseMotionCallback);
