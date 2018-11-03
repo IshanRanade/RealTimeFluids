@@ -1,18 +1,12 @@
-/**
- * @file      main.cpp
- * @brief     Main file for CUDA rasterizer. Handles CUDA-GL interop for display.
- * @authors   Skeleton code: Yining Karl Li, Kai Ninomiya, Shuai Shao (Shrek)
- * @date      2012-2016
- * @copyright University of Pennsylvania
- */
-
-
+// main.cpp
 
 #include "main.hpp"
 
 #define STB_IMAGE_IMPLEMENTATION
 #define TINYGLTF_LOADER_IMPLEMENTATION
 #include <util/tiny_gltf_loader.h>
+#include <types.h>
+#include <fluid.h>
 
 //-------------------------------
 //-------------MAIN--------------
@@ -77,7 +71,7 @@ void mainLoop() {
             seconds = seconds2;
         }
 
-        string title = "CIS565 Rasterizer | " + utilityCore::convertIntToString((int)fps) + " FPS";
+        string title = "Fluid Simulation | " + utilityCore::convertIntToString((int)fps) + " FPS";
         glfwSetWindowTitle(window, title.c_str());
 
         glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo);
@@ -99,7 +93,7 @@ void mainLoop() {
 float scale = 1.0f;
 float x_trans = 0.0f, y_trans = 0.0f, z_trans = -10.0f;
 float x_angle = 0.0f, y_angle = 0.0f;
-void runCuda() {
+/*void runCuda() {
     // Map OpenGL buffer object for writing from CUDA on a single GPU
     // No data is moved (Win & Linux). When mapped to CUDA, OpenGL should not use this buffer
     dptr = NULL;
@@ -125,6 +119,37 @@ void runCuda() {
 
     frame++;
     fpstracker++;
+}*/
+
+void runCuda() {
+    // Register buffers using OpenGL
+    GLuint vertexArray;
+    glGenBuffers( 1, &vertexArray );
+    glBindBuffer( GL_ARRAY_BUFFER, vertexArray );
+    glBufferData( GL_ARRAY_BUFFER, GRID_SIZE * 16, NULL, GL_DYNAMIC_COPY );
+    cudaGLRegisterBufferObject( vertexArray );
+
+    void * vertexPointer;
+    cudaGLMapBufferObject(&vertexPointer, vertexBuffer);
+    
+    // Update and write grid information to VBO
+    kernUpdateGrid<<<gridSz, blockSz>>>();
+    kernGridToVBO<<<gridSz, blockSz>>>(vertexPointer);
+    
+    cudaGLUnmapbufferObject(vertexBuffer);
+    glBindBuffer( GL_ARRAY_BUFFER, vertexBuffer );
+    
+    // Enable Vertex and Color arrays
+    glEnableClientState( GL_VERTEX_ARRAY );
+    glEnableClientState( GL_COLOR_ARRAY );
+    glVertexPointer(3, GL_FLOAT, 16, 0);
+    glColorPointer(4, GL_UNSIGNED_BYTE, 16, 12);
+
+    glDrawArrays(GL_POINTS, 0, GRID_SIZE);
+    SwapBuffer();
+
+    frame++;
+    fpstracker++;
 }
 
 //-------------------------------
@@ -140,7 +165,7 @@ bool init(const tinygltf::Scene & scene) {
 
     width = 800;
     height = 800;
-    window = glfwCreateWindow(width, height, "CIS 565 Pathtracer", NULL, NULL);
+    window = glfwCreateWindow(width, height, "Fluid Simulation", NULL, NULL);
     if (!window) {
         glfwTerminate();
         return false;
