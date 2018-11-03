@@ -125,26 +125,71 @@ __global__ void generateRandomWorldPositionsForParticles(int n, MarkerParticle *
 	}
 }
 
-__device__ float getInterpolatedValue(float x, float y, float z, int componentIndex) {
+//__device__ float getInterpolatedValue(float x, float y, float z, int componentIndex) {
+//
+//}
+//
+//__device__ glm::vec3 getVelocity(float x, float y, float z) {
+//
+//}
+//
+//__device__ glm::vec3 traceParticle(float x, float y, float z, float t) {
+//
+//}
 
-}
-
-__device__ glm::vec3 getVelocity(float x, float y, float z) {
-
-}
-
-__device__ glm::vec3 traceParticle(float x, float y, float z, float t) {
-
-}
-
-__global__ void backwardsParticleTrace(int n, GridCell *cells, int GRID_X, int GRID_Y, int GRID_Z) {
+__global__ void backwardsParticleTrace(int n, GridCell *cells, int GRID_X, int GRID_Y, int GRID_Z, float CELL_WIDTH, float TIME_STEP) {
 	int index = blockIdx.x * blockDim.x + threadIdx.x;
 
 	if (index < n) {
 		GridCell &cell = cells[index];
 
 		// For now just use simple Euler
-		//cell.velocity =	
+		glm::vec3 cellPosition = cell.worldPosition + glm::vec3(CELL_WIDTH / 2.0, CELL_WIDTH / 2.0, CELL_WIDTH / 2.0);
+		glm::vec3 oldPosition = cellPosition - TIME_STEP * cell.velocity;
+
+		int prevCellIndex = getCellCompressedIndex((int)oldPosition.x, (int)oldPosition.y, (int)oldPosition.z, GRID_X, GRID_Y, GRID_Z);
+		if (prevCellIndex < 0 || prevCellIndex >= GRID_X * GRID_Y * GRID_Z) {
+			return;
+		}
+
+		GridCell &otherCell = cells[prevCellIndex];
+		cell.tempVelocity = otherCell.velocity;
+	}
+}
+
+__global__ void applyExternalForcesToGridCells(int n, GridCell *cells, float TIME_STEP) {
+	int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+	if (index < n) {
+		GridCell &cell = cells[index];
+
+		// Apply gravity
+		cell.velocity += glm::vec3(0, -9.8 * TIME_STEP, 0);
+	}
+}
+__global__ void moveMarkerParticlesThroughField(int n, GridCell *cells, MarkerParticle *particles, int GRID_X, int GRID_Y, int GRID_Z, float CELL_WIDTH, float TIME_STEP) {
+	int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+	if (index < n) {
+		MarkerParticle &particle = particles[index];
+
+		// Find the cell that this particle is in
+		int cellIndex = getCellCompressedIndex(particle.worldPosition.x, particle.worldPosition.y, particle.worldPosition.z, GRID_X, GRID_Y, GRID_Z);
+		GridCell &cell = cells[cellIndex];
+		particle.worldPosition += TIME_STEP * cell.velocity;
+
+		particle.worldPosition.x = glm::clamp(particle.worldPosition.x, 0.0f, GRID_X * CELL_WIDTH - 0.01f);
+		particle.worldPosition.y = glm::clamp(particle.worldPosition.y, 0.0f, GRID_Y * CELL_WIDTH - 0.01f);
+		particle.worldPosition.z = glm::clamp(particle.worldPosition.z, 0.0f, GRID_Z * CELL_WIDTH - 0.01f);
+	}
+}
+
+__global__ void swapCellVelocities(int n, GridCell *cells) {
+	int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+	if (index < n) {
+		GridCell &cell = cells[index];
+		cell.velocity = cell.tempVelocity;
 	}
 }
 
@@ -179,5 +224,33 @@ void iterateSim() {
 	checkCUDAError("marking all cells with a marker particle as fluid cells failed");
 	cudaDeviceSynchronize();
 
-	// Appl convection using a backwards particle trace
+	// Apply convection using a backwards particle trace
+	backwardsParticleTrace<<<BLOCKS_CELLS, blockSize>>>(NUM_CELLS, dev_gridCells, GRID_X, GRID_Y, GRID_Z, CELL_WIDTH, TIME_STEP);
+	checkCUDAError("convecting velocities using a backwards particle trace failed");
+	cudaDeviceSynchronize();
+
+	// Set each cell velocity to be the temp velocity, needed since previous step had to save old velocities during calculations
+	swapCellVelocities<<<BLOCKS_CELLS, blockSize>>>(NUM_CELLS, dev_gridCells);
+	checkCUDAError("swapping velocities in cells failed");
+	cudaDeviceSynchronize();
+
+	// Apply external forces to grid cells
+	applyExternalForcesToGridCells<<<BLOCKS_CELLS, blockSize>>>(NUM_CELLS, dev_gridCells, TIME_STEP);
+	checkCUDAError("applying external forces to cells failed");
+	cudaDeviceSynchronize();
+
+	// Apply viscosity
+
+	// Calculate pressure
+
+	// Apply pressure
+
+	// Extrapolate fluid velocities into surrounding cells
+
+	// Set the velocities of surrounding cells
+
+	// Move the marker particles through the velocity field
+	moveMarkerParticlesThroughField<<<BLOCKS_PARTICLES, blockSize>>>(NUM_MARKER_PARTICLES, dev_gridCells, dev_markerParticles, GRID_X, GRID_Y, GRID_Z, CELL_WIDTH, TIME_STEP);
+	checkCUDAError("moving marker particles through velocity field failed");
+	cudaDeviceSynchronize();
 }

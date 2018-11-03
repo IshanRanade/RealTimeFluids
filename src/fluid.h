@@ -21,7 +21,7 @@ static struct MarkerParticle {
 	glm::vec3 color;
 };
 
-static float TIME_STEP = 1.0 / 30.0;
+static float TIME_STEP = 1.0 / 100.0;
 
 static int GRID_X = 16;
 static int GRID_Y = 32;
