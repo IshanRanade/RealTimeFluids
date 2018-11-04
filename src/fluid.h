@@ -28,6 +28,7 @@ static int GRID_Y = 32;
 static int GRID_Z = 16;
 
 static float DENSITY = 1.0;
+static float KINEMATIC_VISCOSITY = 1.0f;
 
 static int NUM_CELLS = GRID_X * GRID_Y * GRID_Z;
 

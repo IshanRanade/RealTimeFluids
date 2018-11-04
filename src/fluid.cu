@@ -164,7 +164,7 @@ __global__ void applyExternalForcesToGridCells(int n, GridCell *cells, float TIM
 		GridCell &cell = cells[index];
 
 		// Apply gravity
-		cell.velocity += glm::vec3(0, -9.8 * TIME_STEP, 0);
+		cell.tempVelocity = cell.velocity + glm::vec3(0, -9.8 * TIME_STEP, 0);
 	}
 }
 __global__ void moveMarkerParticlesThroughField(int n, GridCell *cells, MarkerParticle *particles, int GRID_X, int GRID_Y, int GRID_Z, float CELL_WIDTH, float TIME_STEP) {
@@ -181,6 +181,43 @@ __global__ void moveMarkerParticlesThroughField(int n, GridCell *cells, MarkerPa
 		particle.worldPosition.x = glm::clamp(particle.worldPosition.x, 0.0f, GRID_X * CELL_WIDTH - 0.01f);
 		particle.worldPosition.y = glm::clamp(particle.worldPosition.y, 0.0f, GRID_Y * CELL_WIDTH - 0.01f);
 		particle.worldPosition.z = glm::clamp(particle.worldPosition.z, 0.0f, GRID_Z * CELL_WIDTH - 0.01f);
+	}
+}
+
+__global__ void applyViscosity(int n, GridCell *cells, int GRID_X, int GRID_Y, int GRID_Z, float CELL_WIDTH, float TIME_STEP, float KINEMATIC_VISCOSITY) {
+	int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+	if (index < n) {
+		GridCell &cell = cells[index];
+
+		glm::vec3 cellCoords = getCellUncompressedCoordinates(index, GRID_X, GRID_Y, GRID_Z);
+
+		int cellTopIndex    = getCellCompressedIndex(cellCoords.x, cellCoords.y + 1, cellCoords.z, GRID_X, GRID_Y, GRID_Z);
+		int cellBottomIndex = getCellCompressedIndex(cellCoords.x, cellCoords.y - 1, cellCoords.z, GRID_X, GRID_Y, GRID_Z);
+		int cellLeftIndex   = getCellCompressedIndex(cellCoords.x - 1, cellCoords.y, cellCoords.z, GRID_X, GRID_Y, GRID_Z);
+		int cellRightIndex  = getCellCompressedIndex(cellCoords.x + 1, cellCoords.y, cellCoords.z, GRID_X, GRID_Y, GRID_Z);
+		int cellFrontIndex  = getCellCompressedIndex(cellCoords.x, cellCoords.y, cellCoords.z + 1, GRID_X, GRID_Y, GRID_Z);
+		int cellBackIndex   = getCellCompressedIndex(cellCoords.x, cellCoords.y, cellCoords.z - 1, GRID_X, GRID_Y, GRID_Z);
+
+		float indices[6] = { cellTopIndex, cellBottomIndex, cellLeftIndex, cellRightIndex, cellFrontIndex, cellBackIndex };
+
+		float laplacianX = 0.0;
+		float laplacianY = 0.0;
+		float laplacianZ = 0.0;
+		for (int i = 0; i < 6; ++i) {
+			int currCellIndex = indices[i];
+			if (currCellIndex >= 0 && currCellIndex < GRID_X * GRID_Y * GRID_Z) {
+				laplacianX += cells[currCellIndex].velocity.x;
+				laplacianY += cells[currCellIndex].velocity.y;
+				laplacianZ += cells[currCellIndex].velocity.z;
+			}
+		}
+
+		laplacianX -= 6 * cell.velocity.x;
+		laplacianY -= 6 * cell.velocity.y;
+		laplacianZ -= 6 * cell.velocity.z;
+
+		cell.tempVelocity = cell.velocity + TIME_STEP * KINEMATIC_VISCOSITY * glm::vec3(laplacianX, laplacianY, laplacianZ);
 	}
 }
 
@@ -224,22 +261,35 @@ void iterateSim() {
 	checkCUDAError("marking all cells with a marker particle as fluid cells failed");
 	cudaDeviceSynchronize();
 
-	// Apply convection using a backwards particle trace
+	// Apply convection to velocities using a backwards particle trace
 	backwardsParticleTrace<<<BLOCKS_CELLS, blockSize>>>(NUM_CELLS, dev_gridCells, GRID_X, GRID_Y, GRID_Z, CELL_WIDTH, TIME_STEP);
 	checkCUDAError("convecting velocities using a backwards particle trace failed");
 	cudaDeviceSynchronize();
 
 	// Set each cell velocity to be the temp velocity, needed since previous step had to save old velocities during calculations
-	swapCellVelocities<<<BLOCKS_CELLS, blockSize>>>(NUM_CELLS, dev_gridCells);
+	swapCellVelocities << <BLOCKS_CELLS, blockSize >> > (NUM_CELLS, dev_gridCells);
 	checkCUDAError("swapping velocities in cells failed");
 	cudaDeviceSynchronize();
 
-	// Apply external forces to grid cells
+	// Apply external forces to grid cell velocities
 	applyExternalForcesToGridCells<<<BLOCKS_CELLS, blockSize>>>(NUM_CELLS, dev_gridCells, TIME_STEP);
 	checkCUDAError("applying external forces to cells failed");
 	cudaDeviceSynchronize();
 
-	// Apply viscosity
+	// Set each cell velocity to be the temp velocity, needed since previous step had to save old velocities during calculations
+	swapCellVelocities << <BLOCKS_CELLS, blockSize >> > (NUM_CELLS, dev_gridCells);
+	checkCUDAError("swapping velocities in cells failed");
+	cudaDeviceSynchronize();
+
+	// Apply viscosity to velocities
+	applyViscosity<<<BLOCKS_CELLS, blockSize>>>(NUM_CELLS, dev_gridCells, GRID_X, GRID_Y, GRID_Z, CELL_WIDTH, TIME_STEP, KINEMATIC_VISCOSITY);
+	checkCUDAError("applying viscosity failed");
+	cudaDeviceSynchronize();
+
+	// Set each cell velocity to be the temp velocity, needed since previous step had to save old velocities during calculations
+	swapCellVelocities << <BLOCKS_CELLS, blockSize >> > (NUM_CELLS, dev_gridCells);
+	checkCUDAError("swapping velocities in cells failed");
+	cudaDeviceSynchronize();
 
 	// Calculate pressure
 
