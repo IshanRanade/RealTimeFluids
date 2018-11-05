@@ -2,6 +2,8 @@
 
 #include <cuda_runtime.h>
 #include <cuda.h>
+#include <cusparse.h>
+#include <cusolverSp.h>
 #include <device_launch_parameters.h>
 #include <iostream>
 #include <thrust/random.h>
@@ -230,6 +232,64 @@ __global__ void swapCellVelocities(int n, GridCell *cells) {
 	}
 }
 
+__global__ void setupPressureCalc(int numCells, float* csrValA, int* csrRowPtrA, int* csrColIndA, float* vecB, GridCell* cells, int GRID_X, int GRID_Y, int GRID_Z, float WidthDivTime) {
+	int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+	if (index > 10 && index < 12) {
+		glm::vec3 gridPos = getCellUncompressedCoordinates(index, GRID_X, GRID_Y, GRID_Z);
+
+		// Starting index of current row
+		csrRowPtrA[index] = index * 27;
+
+		int nonSolid = -26;
+		float airCells = 0.0f;
+		for (int i = 0; i < 26; ++i) {
+			int x = i % 3 - 1;
+			int y = (i / 3) % 3 - 1;
+			int z = i / 9 - 1;
+			int adjacent = index + x + (y * GRID_X) + (z * GRID_X * GRID_Y);
+			if (gridPos.x + x < 0 || gridPos.x + x >= GRID_X || gridPos.y + y < 0 || gridPos.y + y >= GRID_Y || gridPos.x + x < 0 || gridPos.z + z >= GRID_Z) {
+				csrColIndA[index * 27 + i] = 0;
+				csrRowPtrA[index * 27 + i] = 0;
+				++nonSolid;
+				continue;
+			}
+			GridCell cell = cells[adjacent];
+
+			// Set index of adjacent cell
+			csrColIndA[index * 27 + i] = adjacent;
+
+			// Set value of matrix element
+			csrRowPtrA[index * 27 + i] = cell.cellType == FLUID ? 1.0f : 0.0f;
+			airCells += cell.cellType == AIR ? 1.0f : 0.0f;
+		}
+		// Set matrix value for current grid cell
+		csrColIndA[index * 27 + 26] = nonSolid;
+		csrRowPtrA[index * 27 + 26] = index;
+
+		// Set value of b vector for pressure linear solver
+		float divU = 0.0f;
+		if (gridPos.x - 1 > 0) {
+			divU += cells[index - 1].velocity.x - cells[index].velocity.x;
+		}
+		if (gridPos.y - 1 > 0) {
+			divU += cells[index - GRID_X].velocity.x - cells[index].velocity.x;
+		}
+		if (gridPos.z - 1 > 0) {
+			divU += cells[index - GRID_X * GRID_Y].velocity.x - cells[index].velocity.x;
+		}
+		vecB[index] = (WidthDivTime) * divU - airCells;
+	}
+}
+
+__global__ void copyPressureToCells(int numCells, float* vecX, GridCell* cells) {
+	int index = blockIdx.x * blockDim.x + threadIdx.x;
+	if (index < numCells) {
+		printf("%d: %f\n", index, vecX[index]);
+		cells[index].pressure = vecX[index];
+	}
+}
+
 void initSim() {
 	// Allocate space for all of the grid cells
 	cudaMalloc(&dev_gridCells, NUM_CELLS * sizeof(GridCell));
@@ -238,6 +298,14 @@ void initSim() {
 	// Allocate space for all of the marker particles
 	cudaMalloc(&dev_markerParticles, NUM_MARKER_PARTICLES * sizeof(MarkerParticle));
 	cudaMemset(dev_markerParticles, 0, NUM_MARKER_PARTICLES * sizeof(MarkerParticle));
+
+	// Allocate space for sparse linear solver of pressures
+	/*nnz = NUM_CELLS * 27;
+	cudaMalloc(&csrValA, nnz * sizeof(float));
+	cudaMalloc(&csrRowPtrA, NUM_CELLS * sizeof(int));
+	cudaMalloc(&csrColIndA, nnz * sizeof(int));
+	cudaMalloc(&vecX, NUM_CELLS * sizeof(float));
+	cudaMalloc(&vecB, NUM_CELLS * sizeof(float));*/
 
 	// Create random world positions for all of the particles
 	generateRandomWorldPositionsForParticles<<<BLOCKS_PARTICLES, blockSize>>>(NUM_MARKER_PARTICLES, dev_markerParticles, GRID_X, GRID_Y, GRID_Z, CELL_WIDTH);
@@ -292,6 +360,22 @@ void iterateSim() {
 	cudaDeviceSynchronize();
 
 	// Calculate pressure
+	/*setupPressureCalc << <BLOCKS_CELLS, blockSize >> > (NUM_CELLS, csrValA, csrRowPtrA, csrColIndA, vecB, dev_gridCells, GRID_X, GRID_Y, GRID_Z, CELL_WIDTH / TIME_STEP);
+	checkCUDAError("setup pressure calc failed");
+	cudaDeviceSynchronize();
+
+	cusolverSpHandle_t cusolver_handle;
+	cusolverStatus_t cusolver_status;
+	cusolver_status = cusolverSpCreate(&cusolver_handle);
+	//std::cout << "status create cusolver handle: " << cusolver_status << std::endl;
+	int singularity = 0;
+	cusparseMatDescr_t descrA;
+	cusparseCreateMatDescr(&descrA);
+	cusolver_status = cusolverSpScsrlsvqr(cusolver_handle, NUM_CELLS, nnz, descrA, csrValA, csrRowPtrA, csrColIndA, vecB, 1e-5, 0, vecX, &singularity);
+
+	copyPressureToCells << <BLOCKS_CELLS, blockSize >> > (NUM_CELLS, vecX, dev_gridCells);
+	checkCUDAError("copy pressure to cells failed");
+	cudaDeviceSynchronize();*/
 
 	// Apply pressure
 

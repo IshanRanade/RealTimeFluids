@@ -37,8 +37,15 @@ static int NUM_MARKER_PARTICLES = 10000;
 
 static int blockSize = 256;
 
-static GridCell *dev_gridCells;
-static MarkerParticle *dev_markerParticles;
+static GridCell* dev_gridCells;
+static MarkerParticle* dev_markerParticles;
+
+static int nnz;
+static float* csrValA;
+static int* csrRowPtrA;
+static int* csrColIndA;
+static float* vecB;
+static float* vecX;
 
 static int BLOCKS_PARTICLES = (NUM_MARKER_PARTICLES + blockSize - 1) / blockSize;
 static int BLOCKS_CELLS = (NUM_CELLS + blockSize - 1) / blockSize;
