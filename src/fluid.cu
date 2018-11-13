@@ -65,36 +65,37 @@ __global__ void fillVBOData(int n, void *vbo, MarkerParticle *particles) {
 	}
 }
 
-__global__ void raymarchPBO(uchar4 *pbo, MarkerParticle *particles, glm::vec3 camPos, float resX, float resY, int GRID_X, int GRID_Y, int GRID_Z) {
+__global__ void raymarchPBO(int numCells, uchar4 *pbo, MarkerParticle *particles, glm::vec3 camPos, float resX, float resY) {
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	int idy = blockIdx.y * blockDim.y + threadIdx.y;
 
 	if (idx < resX && idy < resY) {
+		int iterations = 0;
+		const int maxIterations = 10;
 		glm::vec3 rayPos = camPos;
-		glm::vec3 rayDir;
 		float distance = 999.0f;
 		float epsilon = 0.01f;
 		glm::vec3 view = -glm::normalize(camPos);
 		glm::vec3 up = glm::vec3(0, 1, 0);
-		glm::vec2 pixelLength = glm::vec2(2 * idx / resX, 2 * idy / resY);
+		glm::vec2 pixelLength = glm::vec2(2 * idx / resX, 2 * idy / resY); // WRONG
 
-		rayDir = glm::normalize(view
+		glm::vec3 rayDir = glm::normalize(view
 			- glm::cross(view, up) * pixelLength.x * ((float)idx - resX * 0.5f)
 			- up * pixelLength.y * ((float)idy - resY * 0.5f)
 		);
 
-		while(distance > epsilon) {
-			for(int x = 0; x < GRID_X; ++x) {
-				for(int y = 0; y < GRID_Y; ++y) {
-					for(int z = 0; z < GRID_Z; ++z) {
-						int index = getCellCompressedIndex(x, y, z, GRID_X, GRID_Y, GRID_Z);
-						MarkerParticle &particle = particles[index];
-
-						distance = glm::min(distance, glm::distance(rayPos, particle.worldPosition));
+		while(distance > epsilon && iterations < maxIterations) {
+			for(int i = 0; i < numCells; ++i) {
+				MarkerParticle& particle = particles[i];
+				if(particle.cellType == FLUID) {
+					distance = glm::min(distance, glm::distance(rayPos, particle.worldPosition));
+					if(distance < epsilon) {
+						break;
 					}
 				}
 			}
 			rayPos += rayDir * distance;
+			++iterations;
 		}
 		int index = idx + idy * resX;
 
