@@ -154,12 +154,12 @@ void App::draw() {
 	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	//uchar4 *pbo_dptr = NULL;
-	//cudaGLMapBufferObject((void**)&pbo_dptr, PBO);
+	uchar4 *pbo_dptr = NULL;
+	cudaGLMapBufferObject((void**)&pbo_dptr, PBO);
 
-	//raymarchPBO(pbo_dptr);
+	raymarchPBO(pbo_dptr, glm::vec3(camera->x_trans, camera->y_trans, camera->z_trans), (float)width, (float)height);
 
-	//cudaGLUnmapBufferObject(PBO);
+	cudaGLUnmapBufferObject(PBO);
 
 	glUseProgram(shaderProgram);
 

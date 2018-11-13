@@ -70,7 +70,7 @@ __device__ float smin(float a, float b, float k) {
   return glm::mix(b, a, h) - k * h * (1.0f - h);
 }
 
-__global__ void raymarchPBO(int numCells, uchar4 *pbo, MarkerParticle *particles, glm::vec3 camPos, float resX, float resY) {
+__global__ void raymarchPBO(int numParticles, uchar4 *pbo, MarkerParticle *particles, glm::vec3 camPos, float resX, float resY) {
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	int idy = blockIdx.y * blockDim.y + threadIdx.y;
 
@@ -82,22 +82,26 @@ __global__ void raymarchPBO(int numCells, uchar4 *pbo, MarkerParticle *particles
 		float epsilon = 0.01f;
 		glm::vec3 view = -glm::normalize(camPos);
 		glm::vec3 up = glm::vec3(0, 1, 0);
-		glm::vec2 pixelLength = glm::vec2(2 * idx / resX, 2 * idy / resY); // WRONG
+		glm::vec3 right = glm::normalize(glm::cross(view, up));
+
+		float yscaled = glm::tan(45.0f * (3.1415927f / 180.0f));
+		float xscaled = (yscaled * resX) / resY;
+		glm::vec2 pixelLength = glm::vec2(2 * xscaled / resX, 2 * yscaled / resY);
 
 		glm::vec3 rayDir = glm::normalize(view
-			- glm::cross(view, up) * pixelLength.x * ((float)idx - resX * 0.5f)
+			- right * pixelLength.x * ((float)idx - resX * 0.5f)
 			- up * pixelLength.y * ((float)idy - resY * 0.5f)
 		);
 
 		while(distance > epsilon && iterations < maxIterations) {
-			for(int i = 0; i < numCells; ++i) {
+			for(int i = 0; i < numParticles; ++i) {
 				MarkerParticle& particle = particles[i];
-				if(particle.cellType == FLUID) {
+				//if(particle.cellType == FLUID) {
 					distance = glm::min(distance, glm::distance(rayPos, particle.worldPosition));
 					if(distance < epsilon) {
 						break;
 					}
-				}
+				//}
 			}
 			rayPos += rayDir * distance;
 			++iterations;
@@ -106,12 +110,20 @@ __global__ void raymarchPBO(int numCells, uchar4 *pbo, MarkerParticle *particles
 
 		// Set the color
 		if(distance < epsilon) {
-			pbo[index].x = particle.color.x;
-			pbo[index].y = particle.color.y;
-			pbo[index].z = particle.color.z;
+			float depth = glm::distance(rayPos, camPos) / 100.0f;
+			pbo[index].x = 0.2f * depth;
+			pbo[index].y = 0.2f * depth;
+			pbo[index].z = depth;
 			pbo[index].w = 0;
 		}
 	}
+}
+
+void raymarchPBO(uchar4* pbo, glm::vec3 camPos, float resX, float resY) {
+	int blocks = (NUM_MARKER_PARTICLES + blockSize - 1) / blockSize;
+	raymarchPBO<<<blocks, blockSize>>>(NUM_MARKER_PARTICLES, pbo, dev_markerParticles, camPos, resX, resY);
+	checkCUDAError("raymarch to form PBO failed");
+	cudaDeviceSynchronize();
 }
 
 __global__ void initializeGridCells(int n, GridCell *cells, int GRID_X, int GRID_Y, int GRID_Z, float CELL_WIDTH) {
