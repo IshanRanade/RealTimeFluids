@@ -98,6 +98,11 @@ void App::initGL() {
 	glGenBuffers(1, &VBO);
 	glGenBuffers(1, &EBO);
 
+	glGenBuffers(1, &PBO);
+	glBindBuffer(GL_PIXEL_UNPACK_BUFFER, PBO);
+	glBufferData(GL_PIXEL_UNPACK_BUFFER, sizeof(GLubyte) * width * height * 4, NULL, GL_DYNAMIC_COPY);
+	cudaGLRegisterBufferObject(PBO);
+
 	glBindVertexArray(VAO);
 
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
@@ -145,6 +150,10 @@ void App::start() {
 	glDeleteVertexArrays(1, &VAO);
 	glDeleteBuffers(1, &VBO);
 	glDeleteBuffers(1, &EBO);
+
+	cudaGLUnregisterBufferObject(PBO);
+	glBindBuffer(GL_ARRAY_BUFFER, PBO);
+	glDeleteBuffers(1, &PBO);
 
 	glfwDestroyWindow(window);
 	glfwTerminate();
