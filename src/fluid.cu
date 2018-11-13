@@ -65,6 +65,49 @@ __global__ void fillVBOData(int n, void *vbo, MarkerParticle *particles) {
 	}
 }
 
+__global__ void raymarchPBO(uchar4 *pbo, MarkerParticle *particles, glm::vec3 camPos, float resX, float resY, int GRID_X, int GRID_Y, int GRID_Z) {
+	int idx = blockIdx.x * blockDim.x + threadIdx.x;
+	int idy = blockIdx.y * blockDim.y + threadIdx.y;
+
+	if (idx < resX && idy < resY) {
+		glm::vec3 rayPos = camPos;
+		glm::vec3 rayDir;
+		float distance = 999.0f;
+		float epsilon = 0.01f;
+		glm::vec3 view = -glm::normalize(camPos);
+		glm::vec3 up = glm::vec3(0, 1, 0);
+		glm::vec2 pixelLength = glm::vec2(2 * idx / resX, 2 * idy / resY);
+
+		rayDir = glm::normalize(view
+			- glm::cross(view, up) * pixelLength.x * ((float)idx - resX * 0.5f)
+			- up * pixelLength.y * ((float)idy - resY * 0.5f)
+		);
+
+		while(distance > epsilon) {
+			for(int x = 0; x < GRID_X; ++x) {
+				for(int y = 0; y < GRID_Y; ++y) {
+					for(int z = 0; z < GRID_Z; ++z) {
+						int index = getCellCompressedIndex(x, y, z, GRID_X, GRID_Y, GRID_Z);
+						MarkerParticle &particle = particles[index];
+
+						distance = glm::min(distance, glm::distance(rayPos, particle.worldPosition));
+					}
+				}
+			}
+			rayPos += rayDir * distance;
+		}
+		int index = idx + idy * resX;
+
+		// Set the color
+		if(distance < epsilon) {
+			pbo[index].x = particle.color.x;
+			pbo[index].y = particle.color.y;
+			pbo[index].z = particle.color.z;
+			pbo[index].w = 0;
+		}
+	}
+}
+
 __global__ void initializeGridCells(int n, GridCell *cells, int GRID_X, int GRID_Y, int GRID_Z, float CELL_WIDTH) {
 	int index = blockIdx.x * blockDim.x + threadIdx.x;
 

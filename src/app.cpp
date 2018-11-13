@@ -154,6 +154,13 @@ void App::draw() {
 	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+	//uchar4 *pbo_dptr = NULL;
+	//cudaGLMapBufferObject((void**)&pbo_dptr, PBO);
+
+	//raymarchPBO(pbo_dptr);
+
+	//cudaGLUnmapBufferObject(PBO);
+
 	glUseProgram(shaderProgram);
 
 	GLuint uMVP = glGetUniformLocation(shaderProgram, "u_MVP");

@@ -35,6 +35,7 @@ public:
 	GLuint VAO;
 	GLuint VBO;
 	GLuint EBO;
+	GLuint PBO;
 	GLuint shaderProgram;
 
 	Camera *camera;
