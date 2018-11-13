@@ -65,6 +65,11 @@ __global__ void fillVBOData(int n, void *vbo, MarkerParticle *particles) {
 	}
 }
 
+__device__ float smin(float a, float b, float k) {
+  float h = glm::clamp(0.5f + 0.5f * (b - a) / k, 0.0f, 1.0f);
+  return glm::mix(b, a, h) - k * h * (1.0f - h);
+}
+
 __global__ void raymarchPBO(int numCells, uchar4 *pbo, MarkerParticle *particles, glm::vec3 camPos, float resX, float resY) {
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	int idy = blockIdx.y * blockDim.y + threadIdx.y;
