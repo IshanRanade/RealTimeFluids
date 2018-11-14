@@ -120,7 +120,7 @@ __global__ void raymarchPBO(int numParticles, uchar4 *pbo, MarkerParticle *parti
 }
 
 void raymarchPBO(uchar4* pbo, glm::vec3 camPos, float resX, float resY) {
-	int blocks = (NUM_MARKER_PARTICLES + blockSize - 1) / blockSize;
+	int blocks = (resX * resY + blockSize - 1) / blockSize;
 	raymarchPBO<<<blocks, blockSize>>>(NUM_MARKER_PARTICLES, pbo, dev_markerParticles, camPos, resX, resY);
 	checkCUDAError("raymarch to form PBO failed");
 	cudaDeviceSynchronize();
