@@ -23,8 +23,7 @@ build
 .LSOverride
 
 # Icon must end with two \r
-Icon
-
+Icon
 
 # Thumbnails
 ._*
@@ -190,7 +189,7 @@ install_manifest.txt
 *.slo
 *.lo
 *.o
-#*.obj
+*.obj
 
 # Precompiled Headers
 *.gch
@@ -277,7 +276,7 @@ artifacts/
 *_i.h
 *.ilk
 *.meta
-#*.obj
+*.obj
 *.pch
 *.pdb
 *.pgc
@@ -559,6 +558,3 @@ xcuserdata
 *.xccheckout
 *.moved-aside
 *.xcuserstate
-
-## VS code
-.vscode/

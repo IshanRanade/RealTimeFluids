@@ -11,8 +11,8 @@
 
 #define ERRORCHECK 1
 #define FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
-#define checkCUDAError(msg) checkCUDAErrorFn(msg, FILENAME, __LINE__)
-void checkCUDAErrorFn(const char *msg, const char *file, int line) {
+#define checkCUDAError(msg) checkCUDAErrorFn2(msg, FILENAME, __LINE__)
+void checkCUDAErrorFn2(const char *msg, const char *file, int line) {
 #if ERRORCHECK
 	cudaDeviceSynchronize();
 	cudaError_t err = cudaGetLastError();
@@ -70,66 +70,72 @@ __device__ float smin(float a, float b, float k) {
   return glm::mix(b, a, h) - k * h * (1.0f - h);
 }
 
-__global__ void raymarchPBO(int numParticles, uchar4 *pbo, MarkerParticle *particles, glm::vec3 camPos, float resX, float resY) {
+__device__ bool inBounds(float value, float bounds) {
+	return (value >= -bounds) && (value <= bounds);
+}
+
+__global__ void raymarchPBO(int numParticles, uchar4 *pbo, MarkerParticle *particles, glm::vec3 camPos, Camera camera) {
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	int idy = blockIdx.y * blockDim.y + threadIdx.y;
 
-	if (idx < resX && idy < resY) {
-
-		int index = idx + idy * resX;
-		pbo[index].x = 0.2f;
-		pbo[index].y = 0.2f;
-		pbo[index].z = 1.0f;
-		pbo[index].w = 0;
-		/*
+	if (idx < camera.resolution.x && idy < camera.resolution.y) {
 
 		int iterations = 0;
 		const int maxIterations = 10;
 		glm::vec3 rayPos = camPos;
-		float distance = 999.0f;
-		float epsilon = 0.01f;
-		glm::vec3 view = -glm::normalize(camPos);
-		glm::vec3 up = glm::vec3(0, 1, 0);
-		glm::vec3 right = glm::normalize(glm::cross(view, up));
+		float distance = 9999.0f;
+		float epsilon = 0.35f;
+		glm::vec3 view = camera.view;
+		glm::vec3 up = camera.up;
+		glm::vec3 right = camera.right;
 
-		float yscaled = glm::tan(45.0f * (3.1415927f / 180.0f));
-		float xscaled = (yscaled * resX) / resY;
-		glm::vec2 pixelLength = glm::vec2(2 * xscaled / resX, 2 * yscaled / resY);
+		float yscaled = glm::tan(camera.fov.y * (3.1415927f / 180.0f));
+		float xscaled = (yscaled *  camera.resolution.x) / camera.resolution.y;
+		glm::vec2 pixelLength = glm::vec2(2 * xscaled / camera.resolution.x, 2 * yscaled / camera.resolution.y);
 
 		glm::vec3 rayDir = glm::normalize(view
-			- right * pixelLength.x * ((float)idx - resX * 0.5f)
-			- up * pixelLength.y * ((float)idy - resY * 0.5f)
+			- right * pixelLength.x * ((float)idx - camera.resolution.x * 0.5f)
+			- up * pixelLength.y * ((float)idy - camera.resolution.y * 0.5f)
 		);
 
 		while(distance > epsilon && iterations < maxIterations) {
 			for(int i = 0; i < numParticles; ++i) {
 				MarkerParticle& particle = particles[i];
 				//if(particle.cellType == FLUID) {
-					distance = glm::min(distance, glm::distance(rayPos, particle.worldPosition));
-					if(distance < epsilon) {
-						break;
-					}
+				distance = smin(distance, glm::distance(rayPos, particle.worldPosition), 1.0f);
+				if(distance < epsilon) {
+					break;
+				}
 				//}
 			}
 			rayPos += rayDir * distance;
 			++iterations;
 		}
-		int index = idx + idy * resX;
+		int index = idx + idy * camera.resolution.x;
 
 		// Set the color
 		if(distance < epsilon) {
-			float depth = glm::distance(rayPos, camPos) / 100.0f;
-			pbo[index].x = 0.2f * depth;
-			pbo[index].y = 0.2f * depth;
-			pbo[index].z = depth;
+			float depth = glm::clamp(glm::distance(rayPos, camPos) / 10.0f, 0.0f, 1.0f);
+			pbo[index].x = 50.f * depth;
+			pbo[index].y = 50.f * depth;
+			pbo[index].z = 255.f * depth;
 			pbo[index].w = 0;
-		}*/
+		}
+		else {
+			pbo[index].x = 200.f;
+			pbo[index].y = 200.f;
+			pbo[index].z = 255.f;
+			pbo[index].w = 0;
+		}
 	}
 }
 
-void raymarchPBO(uchar4* pbo, glm::vec3 camPos, float resX, float resY) {
-	int blocks = (resX * resY + blockSize - 1) / blockSize;
-	raymarchPBO<<<blocks, blockSize>>>(NUM_MARKER_PARTICLES, pbo, dev_markerParticles, camPos, resX, resY);
+void raymarchPBO(uchar4* pbo, glm::vec3 camPos, Camera camera) {
+	const dim3 blockSize2d(8, 8);
+	const dim3 blocksPerGrid2d(
+		(camera.resolution.x + blockSize2d.x - 1) / blockSize2d.x,
+		(camera.resolution.y + blockSize2d.y - 1) / blockSize2d.y);
+	raymarchPBO<<<blocksPerGrid2d, blockSize2d >>>(NUM_MARKER_PARTICLES, pbo, dev_markerParticles, camPos, camera);
 	checkCUDAError("raymarch to form PBO failed");
 	cudaDeviceSynchronize();
 }
