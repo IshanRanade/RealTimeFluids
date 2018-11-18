@@ -84,12 +84,12 @@ __global__ void raymarchPBO(int numParticles, uchar4 *pbo, MarkerParticle *parti
 	int idy = blockIdx.y * blockDim.y + threadIdx.y;
 
 	if (idx < camera.resolution.x && idy < camera.resolution.y) {
-
+        // Setup variables
 		int iterations = 0;
 		const int maxIterations = 16;
 		glm::vec3 rayPos = camPos;
 		float distance = 1000.0f;
-		float epsilon = 0.35f;
+		float epsilon = 1.25f;
 		glm::vec3 view = camera.view;
 		glm::vec3 up = camera.up;
 		glm::vec3 right = camera.right;
@@ -104,6 +104,7 @@ __global__ void raymarchPBO(int numParticles, uchar4 *pbo, MarkerParticle *parti
 			- up * pixelLength.y * ((float)idy - camera.resolution.y * 0.5f)
 		);
 
+        // Sphere march for smoothed min marker particle
 		while(distance > epsilon && iterations < maxIterations) {
 			for(int i = 0; i < numParticles; ++i) {
 				MarkerParticle& particle = particles[i];
@@ -122,14 +123,15 @@ __global__ void raymarchPBO(int numParticles, uchar4 *pbo, MarkerParticle *parti
 		int index = idx + idy * camera.resolution.x;
 
 		// Set the color
-        glm::vec3 color = glm::vec3(50.f, 50.f, 255.f);
 		if(distance < epsilon) {
+            // Ray hit a marker particle
+            glm::vec3 color = glm::vec3(50.f, 50.f, 255.f);
 			float depth = glm::clamp(glm::distance(rayPos, camPos) / 10.0f, 0.0f, 1.0f);
             glm::vec3 lightPos = glm::vec3(2, 1, 0);
-            float intensity = 10.0f;
+            float specularIntensity = 10.0f;
 
             glm::vec3 refl = glm::normalize(glm::normalize(camPos - rayPos) + glm::normalize(lightPos));
-            float specularTerm = glm::pow(glm::max(glm::dot(refl, normal), 0.0f), intensity);
+            float specularTerm = glm::pow(glm::max(glm::dot(refl, normal), 0.0f), specularIntensity);
 
             color = color * (depth + specularTerm);
 			pbo[index].x = glm::min(color.x, 255.0f);
@@ -137,13 +139,8 @@ __global__ void raymarchPBO(int numParticles, uchar4 *pbo, MarkerParticle *parti
 			pbo[index].z = glm::min(color.z, 255.0f);
 			pbo[index].w = 0;
 		}
-		else if(distance < 1.25f) {
-            pbo[index].x = 100.0f;
-            pbo[index].y = 100.0f;
-            pbo[index].z = 255.0f;
-            pbo[index].w = 0;
-		}
         else {
+            // Probably clear background
             pbo[index].x = 205.0f;
             pbo[index].y = 205.0f;
             pbo[index].z = 240.0f;
