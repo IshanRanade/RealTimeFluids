@@ -70,6 +70,11 @@ __device__ float smin(float a, float b, float k) {
   return glm::mix(b, a, h) - k * h * (1.0f - h);
 }
 
+__device__ glm::vec4 smin(glm::vec3 vecA, glm::vec3 vecB, float a, float b, float k) {
+    float h = glm::clamp(0.5f + 0.5f * (b - a) / k, 0.0f, 1.0f);
+    return glm::vec4(glm::mix(vecA, vecB, h), glm::mix(b, a, h) - k * h * (1.0f - h));
+}
+
 __device__ bool inBounds(float value, float bounds) {
 	return (value >= -bounds) && (value <= bounds);
 }
@@ -81,13 +86,14 @@ __global__ void raymarchPBO(int numParticles, uchar4 *pbo, MarkerParticle *parti
 	if (idx < camera.resolution.x && idy < camera.resolution.y) {
 
 		int iterations = 0;
-		const int maxIterations = 10;
+		const int maxIterations = 16;
 		glm::vec3 rayPos = camPos;
-		float distance = 9999.0f;
+		float distance = 1000.0f;
 		float epsilon = 0.35f;
 		glm::vec3 view = camera.view;
 		glm::vec3 up = camera.up;
 		glm::vec3 right = camera.right;
+        glm::vec3 normal = glm::vec3(0, 1, 0);
 
 		float yscaled = glm::tan(camera.fov.y * (3.1415927f / 180.0f));
 		float xscaled = (yscaled *  camera.resolution.x) / camera.resolution.y;
@@ -102,8 +108,10 @@ __global__ void raymarchPBO(int numParticles, uchar4 *pbo, MarkerParticle *parti
 			for(int i = 0; i < numParticles; ++i) {
 				MarkerParticle& particle = particles[i];
 				//if(particle.cellType == FLUID) {
-				distance = smin(distance, glm::distance(rayPos, particle.worldPosition), 1.0f);
+                //distance = glm::min(distance, glm::distance(rayPos, particle.worldPosition));
+				distance = smin(distance, glm::distance(rayPos, particle.worldPosition), 2.0f);
 				if(distance < epsilon) {
+                    normal = glm::normalize(rayPos - particle.worldPosition);
 					break;
 				}
 				//}
@@ -114,19 +122,33 @@ __global__ void raymarchPBO(int numParticles, uchar4 *pbo, MarkerParticle *parti
 		int index = idx + idy * camera.resolution.x;
 
 		// Set the color
+        glm::vec3 color = glm::vec3(50.f, 50.f, 255.f);
 		if(distance < epsilon) {
 			float depth = glm::clamp(glm::distance(rayPos, camPos) / 10.0f, 0.0f, 1.0f);
-			pbo[index].x = 50.f * depth;
-			pbo[index].y = 50.f * depth;
-			pbo[index].z = 255.f * depth;
+            glm::vec3 lightPos = glm::vec3(2, 1, 0);
+            float intensity = 10.0f;
+
+            glm::vec3 refl = glm::normalize(glm::normalize(camPos - rayPos) + glm::normalize(lightPos));
+            float specularTerm = glm::pow(glm::max(glm::dot(refl, normal), 0.0f), intensity);
+
+            color = color * (depth + specularTerm);
+			pbo[index].x = glm::min(color.x, 255.0f);
+			pbo[index].y = glm::min(color.y, 255.0f);
+			pbo[index].z = glm::min(color.z, 255.0f);
 			pbo[index].w = 0;
 		}
-		else {
-			pbo[index].x = 200.f;
-			pbo[index].y = 200.f;
-			pbo[index].z = 255.f;
-			pbo[index].w = 0;
+		else if(distance < 1.25f) {
+            pbo[index].x = 100.0f;
+            pbo[index].y = 100.0f;
+            pbo[index].z = 255.0f;
+            pbo[index].w = 0;
 		}
+        else {
+            pbo[index].x = 205.0f;
+            pbo[index].y = 205.0f;
+            pbo[index].z = 240.0f;
+            pbo[index].w = 0;
+        }
 	}
 }
 
