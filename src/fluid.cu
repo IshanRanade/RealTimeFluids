@@ -75,6 +75,14 @@ __global__ void raymarchPBO(int numParticles, uchar4 *pbo, MarkerParticle *parti
 	int idy = blockIdx.y * blockDim.y + threadIdx.y;
 
 	if (idx < resX && idy < resY) {
+
+		int index = idx + idy * resX;
+		pbo[index].x = 0.2f;
+		pbo[index].y = 0.2f;
+		pbo[index].z = 1.0f;
+		pbo[index].w = 0;
+		/*
+
 		int iterations = 0;
 		const int maxIterations = 10;
 		glm::vec3 rayPos = camPos;
@@ -115,7 +123,7 @@ __global__ void raymarchPBO(int numParticles, uchar4 *pbo, MarkerParticle *parti
 			pbo[index].y = 0.2f * depth;
 			pbo[index].z = depth;
 			pbo[index].w = 0;
-		}
+		}*/
 	}
 }
 

@@ -170,14 +170,16 @@ void App::draw() {
 
 	cudaGLUnmapBufferObject(PBO);
 
+	glBindBuffer(GL_PIXEL_UNPACK_BUFFER, PBO);
+
 	glUseProgram(shaderProgram);
 
 	GLuint uMVP = glGetUniformLocation(shaderProgram, "u_MVP");
 	glUniformMatrix4fv(uMVP, 1, GL_FALSE, &MVP[0][0]);
 
-	glBindBuffer(GL_ARRAY_BUFFER, VBO);
-	glBindVertexArray(VAO);
-	glDrawElements(GL_POINTS, NUM_MARKER_PARTICLES, GL_UNSIGNED_INT, 0);
+	//glBindBuffer(GL_ARRAY_BUFFER, VBO);
+	//glBindVertexArray(VAO);
+	//glDrawElements(GL_POINTS, NUM_MARKER_PARTICLES, GL_UNSIGNED_INT, 0);
 
 	glfwSwapBuffers(window);
 }
