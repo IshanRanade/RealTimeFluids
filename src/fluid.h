@@ -53,4 +53,4 @@ static int BLOCKS_CELLS = (NUM_CELLS + blockSize - 1) / blockSize;
 void initSim();
 void iterateSim();
 void fillVBOsWithMarkerParticles(void *vbo);
-void raymarchPBO(uchar4* pbo, glm::vec3 camPos, float resX, float resY);
+void raymarchPBO(void* pbo, glm::vec3 camPos, float resX, float resY);

@@ -7,6 +7,7 @@
 #include <device_launch_parameters.h>
 #include <iostream>
 #include <thrust/random.h>
+#include <cuchar>
 
 
 #define ERRORCHECK 1
@@ -74,9 +75,11 @@ __global__ void raymarchPBO(int numParticles, uchar4 *pbo, MarkerParticle *parti
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	int idy = blockIdx.y * blockDim.y + threadIdx.y;
 
-	if (idx < resX && idy < resY) {
+	int index = blockIdx.x * blockDim.x + threadIdx.x;
 
-		int index = idx + idy * resX;
+	if (index < 100) {
+
+		//int index = idx + idy * resX;
 		pbo[index].x = 0.2f;
 		pbo[index].y = 0.2f;
 		pbo[index].z = 1.0f;
@@ -127,9 +130,21 @@ __global__ void raymarchPBO(int numParticles, uchar4 *pbo, MarkerParticle *parti
 	}
 }
 
-void raymarchPBO(uchar4* pbo, glm::vec3 camPos, float resX, float resY) {
+__global__ void test(uchar4* pbo, glm::vec3 camPos, float resX, float resY) {
+	int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+	if (index < resX * resY) {
+		pbo[index].w = 1.0;
+		pbo[index].x = 100.0;
+		pbo[index].y = 120.0;
+		pbo[index].z = 140.0;
+	}
+}
+
+void raymarchPBO(void* pbo, glm::vec3 camPos, float resX, float resY) {
 	int blocks = (resX * resY + blockSize - 1) / blockSize;
-	raymarchPBO<<<blocks, blockSize>>>(NUM_MARKER_PARTICLES, pbo, dev_markerParticles, camPos, resX, resY);
+	//raymarchPBO<<<blocks, blockSize>>>(NUM_MARKER_PARTICLES, pbo, dev_markerParticles, camPos, resX, resY);
+	test << <blocks, blockSize >> > ((uchar4*)pbo, camPos, resX, resY);
 	checkCUDAError("raymarch to form PBO failed");
 	cudaDeviceSynchronize();
 }

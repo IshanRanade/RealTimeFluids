@@ -98,10 +98,20 @@ void App::initGL() {
 	glGenBuffers(1, &VBO);
 	glGenBuffers(1, &EBO);
 
+	int num_texels = width * height;
+	int num_values = num_texels * 4;
+	int sizeTextureData = sizeof(GLubyte) * num_values;
+
 	glGenBuffers(1, &PBO);
 	glBindBuffer(GL_PIXEL_UNPACK_BUFFER, PBO);
-	glBufferData(GL_PIXEL_UNPACK_BUFFER, sizeof(GLubyte) * width * height * 4, NULL, GL_DYNAMIC_COPY);
-	cudaGLRegisterBufferObject(PBO);
+	glBufferData(GL_PIXEL_UNPACK_BUFFER, sizeTextureData, NULL, GL_DYNAMIC_COPY);
+
+	glEnable(GL_TEXTURE_2D);
+	glGenTextures(1, &displayTexture);
+	glBindTexture(GL_TEXTURE_2D, displayTexture);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
 	glBindVertexArray(VAO);
 
@@ -163,19 +173,36 @@ void App::draw() {
 	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	uchar4 *pbo_dptr = NULL;
-	cudaGLMapBufferObject((void**)&pbo_dptr, PBO);
+	void *pbo_dptr = NULL;
+
+	cudaGraphicsResource_t resource = 0;
+	cudaGraphicsGLRegisterBuffer(&resource, PBO, cudaGraphicsRegisterFlagsNone);
+	cudaGraphicsMapResources(1, &resource, NULL);
+	size_t size;
+	cudaGraphicsResourceGetMappedPointer(&pbo_dptr, &size, resource);
 
 	raymarchPBO(pbo_dptr, glm::vec3(camera->x_trans, camera->y_trans, camera->z_trans), (float)width, (float)height);
 
-	cudaGLUnmapBufferObject(PBO);
+	cudaGraphicsUnmapResources(1, &resource, NULL);
+	cudaGraphicsUnregisterResource(resource);
+
+	glBindBuffer(GL_PIXEL_UNPACK_BUFFER, PBO);
+	glBindTexture(GL_TEXTURE_2D, displayTexture);
+	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+
+	glBegin(GL_QUADS);
+		glTexCoord2f(0, 0); glVertex3f(-1, -1, 0);
+		glTexCoord2f(0, 1); glVertex3f(-1, 1, 0);
+		glTexCoord2f(1, 1); glVertex3f(1, 1, 0);
+		glTexCoord2f(1, 0); glVertex3f(1, -1, 0);
+	glEnd();
 
 	glBindBuffer(GL_PIXEL_UNPACK_BUFFER, PBO);
 
-	glUseProgram(shaderProgram);
+	//glUseProgram(shaderProgram);
 
-	GLuint uMVP = glGetUniformLocation(shaderProgram, "u_MVP");
-	glUniformMatrix4fv(uMVP, 1, GL_FALSE, &MVP[0][0]);
+	//GLuint uMVP = glGetUniformLocation(shaderProgram, "u_MVP");
+	//glUniformMatrix4fv(uMVP, 1, GL_FALSE, &MVP[0][0]);
 
 	//glBindBuffer(GL_ARRAY_BUFFER, VBO);
 	//glBindVertexArray(VAO);
