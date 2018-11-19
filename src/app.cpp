@@ -6,7 +6,7 @@
 #include "fluid.h"
 
 App::App() {
-	camera = new Camera();
+	camera = new Camera(width, height);
 	
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -139,16 +139,11 @@ void App::start() {
 
 		glfwPollEvents();
 
-		P = glm::frustum<float>(-camera->scale * ((float)width) / ((float)height),
-			camera->scale * ((float)width / (float)height),
-			-camera->scale, camera->scale, 1.0, 1000.0);
+		P = glm::perspective(glm::radians(camera->fov.y), (float)width / (float)height, 0.1f, 1000.0f);
 
 		M = glm::mat4();
 
-		V = 
-			glm::translate(glm::mat4(), glm::vec3(camera->x_trans, camera->y_trans, camera->z_trans))
-			* glm::rotate(glm::mat4(), camera->x_angle, glm::vec3(1.0f, 0.0f, 0.0f))
-			* glm::rotate(glm::mat4(), camera->y_angle, glm::vec3(0.0f, 1.0f, 0.0f));
+		V = glm::lookAt(camera->position, camera->lookAt, camera->up);
 
 		glm::mat3 MV_normal = glm::transpose(glm::inverse(glm::mat3(V) * glm::mat3(M)));
 		glm::mat4 MV = V * M;
@@ -160,8 +155,7 @@ void App::start() {
 	glDeleteVertexArrays(1, &VAO);
 	glDeleteBuffers(1, &VBO);
 	glDeleteBuffers(1, &EBO);
-
-	cudaGLUnregisterBufferObject(PBO);
+	
 	glBindBuffer(GL_ARRAY_BUFFER, PBO);
 	glDeleteBuffers(1, &PBO);
 
@@ -181,7 +175,7 @@ void App::draw() {
 	size_t size;
 	cudaGraphicsResourceGetMappedPointer(&pbo_dptr, &size, resource);
 
-	raymarchPBO(pbo_dptr, glm::vec3(camera->x_trans, camera->y_trans, camera->z_trans), (float)width, (float)height);
+	raymarchPBO(pbo_dptr, camera->position, *camera);
 
 	cudaGraphicsUnmapResources(1, &resource, NULL);
 	cudaGraphicsUnregisterResource(resource);

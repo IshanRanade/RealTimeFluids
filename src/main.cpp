@@ -27,31 +27,31 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
 	}
 }
 void mouseMotionCallback(GLFWwindow* window, double xpos, double ypos) {
-	const double s_r = 0.01;
-	const double s_t = 0.01;
+	//const double s_r = 0.01;
+	//const double s_t = 0.01;
 
-	double diffx = xpos - app->lastx;
-	double diffy = ypos - app->lasty;
-	app->lastx = xpos;
-	app->lasty = ypos;
+	//double diffx = xpos - app->lastx;
+	//double diffy = ypos - app->lasty;
+	//app->lastx = xpos;
+	//app->lasty = ypos;
 
-	if (app->mouseState == app->ROTATE)
-	{
-		//rotate
-		app->camera->x_angle += (float)s_r * diffy;
-		app->camera->y_angle += (float)s_r * diffx;
-	}
-	else if (app->mouseState == app->TRANSLATE)
-	{
-		//translate
-		app->camera->x_trans += (float)(s_t * diffx);
-		app->camera->y_trans += (float)(-s_t * diffy);
-	}
+	//if (app->mouseState == app->ROTATE)
+	//{
+	//	//rotate
+	//	app->camera->x_angle += (float)s_r * diffy;
+	//	app->camera->y_angle += (float)s_r * diffx;
+	//}
+	//else if (app->mouseState == app->TRANSLATE)
+	//{
+	//	//translate
+	//	app->camera->x_trans += (float)(s_t * diffx);
+	//	app->camera->y_trans += (float)(-s_t * diffy);
+	//}
 }
 
 void mouseWheelCallback(GLFWwindow* window, double xoffset, double yoffset) {
-	const double s = 1.0;	// sensitivity
-	app->camera->z_trans += (float)(s * yoffset);
+	//const double s = 1.0;	// sensitivity
+	//app->camera->z_trans += (float)(s * yoffset);
 }
 
 int main() {

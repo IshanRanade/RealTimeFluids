@@ -67,84 +67,96 @@ __global__ void fillVBOData(int n, void *vbo, MarkerParticle *particles) {
 }
 
 __device__ float smin(float a, float b, float k) {
-  float h = glm::clamp(0.5f + 0.5f * (b - a) / k, 0.0f, 1.0f);
-  return glm::mix(b, a, h) - k * h * (1.0f - h);
+	float h = glm::clamp(0.5f + 0.5f * (b - a) / k, 0.0f, 1.0f);
+	return glm::mix(b, a, h) - k * h * (1.0f - h);
 }
 
-__global__ void raymarchPBO(int numParticles, uchar4 *pbo, MarkerParticle *particles, glm::vec3 camPos, float resX, float resY) {
-	int idx = blockIdx.x * blockDim.x + threadIdx.x;
-	int idy = blockIdx.y * blockDim.y + threadIdx.y;
+__device__ glm::vec4 smin(glm::vec3 vecA, glm::vec3 vecB, float a, float b, float k) {
+	float h = glm::clamp(0.5f + 0.5f * (b - a) / k, 0.0f, 1.0f);
+	return glm::vec4(glm::mix(vecA, vecB, h), glm::mix(b, a, h) - k * h * (1.0f - h));
+}
 
+__global__ void raymarchPBO(int numParticles, uchar4 *pbo, MarkerParticle *particles, glm::vec3 camPos, Camera camera) {
 	int index = blockIdx.x * blockDim.x + threadIdx.x;
 
-	if (index < 100) {
-
-		//int index = idx + idy * resX;
-		pbo[index].x = 0.2f;
-		pbo[index].y = 0.2f;
-		pbo[index].z = 1.0f;
+	if (index < camera.resolution.x * camera.resolution.y) {
+	/*	pbo[index].x = 255.0f;
+		pbo[index].y = 120.0f;
+		pbo[index].z = 150.0f;
 		pbo[index].w = 0;
-		/*
+		return;*/
 
+		
+		// Setup variables
+		int idx = index / camera.resolution.x;
+		int idy = index % camera.resolution.y;
 		int iterations = 0;
-		const int maxIterations = 10;
+		const int maxIterations = 16;
 		glm::vec3 rayPos = camPos;
-		float distance = 999.0f;
-		float epsilon = 0.01f;
-		glm::vec3 view = -glm::normalize(camPos);
-		glm::vec3 up = glm::vec3(0, 1, 0);
-		glm::vec3 right = glm::normalize(glm::cross(view, up));
+		float distance = 1000.0f;
+		float epsilon = 1.25f;
+		glm::vec3 view = camera.view;
+		glm::vec3 up = camera.up;
+		glm::vec3 right = camera.right;
+		glm::vec3 normal = glm::vec3(0, 1, 0);
 
-		float yscaled = glm::tan(45.0f * (3.1415927f / 180.0f));
-		float xscaled = (yscaled * resX) / resY;
-		glm::vec2 pixelLength = glm::vec2(2 * xscaled / resX, 2 * yscaled / resY);
+		float yscaled = glm::tan(camera.fov.y * (3.1415927f / 180.0f));
+		float xscaled = (yscaled *  camera.resolution.x) / camera.resolution.y;
+		glm::vec2 pixelLength = glm::vec2(2 * xscaled / camera.resolution.x, 2 * yscaled / camera.resolution.y);
 
 		glm::vec3 rayDir = glm::normalize(view
-			- right * pixelLength.x * ((float)idx - resX * 0.5f)
-			- up * pixelLength.y * ((float)idy - resY * 0.5f)
+			- right * pixelLength.x * ((float)idx - camera.resolution.x * 0.5f)
+			- up * pixelLength.y * ((float)idy - camera.resolution.y * 0.5f)
 		);
 
-		while(distance > epsilon && iterations < maxIterations) {
-			for(int i = 0; i < numParticles; ++i) {
+		// Sphere march for smoothed min marker particle
+		while (distance > epsilon && iterations < maxIterations) {
+			for (int i = 0; i < numParticles; ++i) {
 				MarkerParticle& particle = particles[i];
 				//if(particle.cellType == FLUID) {
-					distance = glm::min(distance, glm::distance(rayPos, particle.worldPosition));
-					if(distance < epsilon) {
-						break;
-					}
+				//distance = glm::min(distance, glm::distance(rayPos, particle.worldPosition));
+				distance = smin(distance, glm::distance(rayPos, particle.worldPosition), 2.0f);
+				if (distance < epsilon) {
+					normal = glm::normalize(rayPos - particle.worldPosition);
+					break;
+				}
 				//}
 			}
 			rayPos += rayDir * distance;
 			++iterations;
 		}
-		int index = idx + idy * resX;
+		int index = idx + idy * camera.resolution.x;
 
 		// Set the color
-		if(distance < epsilon) {
-			float depth = glm::distance(rayPos, camPos) / 100.0f;
-			pbo[index].x = 0.2f * depth;
-			pbo[index].y = 0.2f * depth;
-			pbo[index].z = depth;
+		if (distance < epsilon) {
+			// Ray hit a marker particle
+			glm::vec3 color = glm::vec3(50.f, 50.f, 255.f);
+			float depth = glm::clamp(glm::distance(rayPos, camPos) / 10.0f, 0.0f, 1.0f);
+			glm::vec3 lightPos = glm::vec3(2, 1, 0);
+			float specularIntensity = 10.0f;
+
+			glm::vec3 refl = glm::normalize(glm::normalize(camPos - rayPos) + glm::normalize(lightPos));
+			float specularTerm = glm::pow(glm::max(glm::dot(refl, normal), 0.0f), specularIntensity);
+
+			color = color * (depth + specularTerm);
+			pbo[index].x = glm::min(color.x, 255.0f);
+			pbo[index].y = glm::min(color.y, 255.0f);
+			pbo[index].z = glm::min(color.z, 255.0f);
 			pbo[index].w = 0;
-		}*/
+		}
+		else {
+			// Probably clear background
+			pbo[index].x = 205.0f;
+			pbo[index].y = 205.0f;
+			pbo[index].z = 240.0f;
+			pbo[index].w = 0;
+		}
 	}
 }
 
-__global__ void test(uchar4* pbo, glm::vec3 camPos, float resX, float resY) {
-	int index = blockIdx.x * blockDim.x + threadIdx.x;
-
-	if (index < resX * resY) {
-		pbo[index].w = 1.0;
-		pbo[index].x = 100.0;
-		pbo[index].y = 120.0;
-		pbo[index].z = 140.0;
-	}
-}
-
-void raymarchPBO(void* pbo, glm::vec3 camPos, float resX, float resY) {
-	int blocks = (resX * resY + blockSize - 1) / blockSize;
-	//raymarchPBO<<<blocks, blockSize>>>(NUM_MARKER_PARTICLES, pbo, dev_markerParticles, camPos, resX, resY);
-	test << <blocks, blockSize >> > ((uchar4*)pbo, camPos, resX, resY);
+void raymarchPBO(void* pbo, glm::vec3 camPos, Camera camera) {
+	int blocks = (camera.resolution.x * camera.resolution.y + blockSize - 1) / blockSize;
+	raymarchPBO << <blocks, blockSize >> > (NUM_MARKER_PARTICLES, (uchar4*)pbo, dev_markerParticles, camPos, camera);
 	checkCUDAError("raymarch to form PBO failed");
 	cudaDeviceSynchronize();
 }
