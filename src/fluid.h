@@ -34,7 +34,7 @@ static float KINEMATIC_VISCOSITY = 1.0f;
 static int NUM_CELLS = GRID_X * GRID_Y * GRID_Z;
 
 static float CELL_WIDTH = 1.0;
-static int NUM_MARKER_PARTICLES = 100;
+static int NUM_MARKER_PARTICLES = 64000;
 
 static int blockSize = 256;
 

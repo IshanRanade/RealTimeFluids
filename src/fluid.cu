@@ -91,7 +91,7 @@ __global__ void raymarchPBO(int numParticles, uchar4 *pbo, MarkerParticle *parti
 		int idx = index / camera.resolution.x;
 		int idy = index % camera.resolution.y;
 		int iterations = 0;
-		const int maxIterations = 16;
+		const int maxIterations = 4;
 		glm::vec3 rayPos = camPos;
 		float distance = 1000.0f;
 		float epsilon = 1.25f;
