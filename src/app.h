@@ -55,7 +55,18 @@ struct Camera {
 	}
 
 	void update() {
+		position.x = zoom * sin(phi) * sin(theta);
+		position.y = zoom * cos(theta);
+		position.z = zoom * cos(phi) * sin(theta);
 
+		view = -glm::normalize(position);
+		glm::vec3 v = view;
+		glm::vec3 u = glm::vec3(0, 1, 0);//glm::normalize(cam.up);
+		glm::vec3 r = glm::cross(v, u);
+		up = glm::cross(r, v);
+		right = r;
+
+		position += lookAt;
 	}
 };
 
@@ -92,6 +103,10 @@ public:
 	enum ControlState { NONE = 0, ROTATE, TRANSLATE };
 	ControlState mouseState = NONE;
 
-	double lastx = (double)width / 2;
-	double lasty = (double)height / 2;
+	double lastX = (double)width / 2;
+	double lastY = (double)height / 2;
+	bool leftMousePressed = false;
+	bool rightMousePressed = false;
+	bool middleMousePressed = false;
+	bool camchanged = true;
 };

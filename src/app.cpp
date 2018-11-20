@@ -135,6 +135,11 @@ void App::initGL() {
 
 void App::start() {
 	while (!glfwWindowShouldClose(window)) {
+		if (camchanged) {
+			//camera->update();
+			camchanged = false;
+		}
+
 		runSim();
 
 		glfwPollEvents();

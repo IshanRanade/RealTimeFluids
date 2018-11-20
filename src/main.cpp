@@ -9,22 +9,9 @@ void keyCallback(GLFWwindow *window, int key, int scancode, int action, int mods
 }
 
 void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
-	if (action == GLFW_PRESS)
-	{
-		if (button == GLFW_MOUSE_BUTTON_LEFT)
-		{
-			app->mouseState = app->ROTATE;
-		}
-		else if (button == GLFW_MOUSE_BUTTON_RIGHT)
-		{
-			app->mouseState = app->TRANSLATE;
-		}
-
-	}
-	else if (action == GLFW_RELEASE)
-	{
-		app->mouseState = app->NONE;
-	}
+	app->leftMousePressed = (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS);
+	app->rightMousePressed = (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS);
+	app->middleMousePressed = (button == GLFW_MOUSE_BUTTON_MIDDLE && action == GLFW_PRESS);
 }
 void mouseMotionCallback(GLFWwindow* window, double xpos, double ypos) {
 	//const double s_r = 0.01;
@@ -54,13 +41,42 @@ void mouseWheelCallback(GLFWwindow* window, double xoffset, double yoffset) {
 	//app->camera->z_trans += (float)(s * yoffset);
 }
 
+void mousePositionCallback(GLFWwindow* window, double xpos, double ypos) {
+	if (xpos == app->lastX || ypos == app->lastY) return; // otherwise, clicking back into window causes re-start
+	if (app->leftMousePressed) {
+		// compute new camera parameters
+		app->camera->phi -= (xpos - app->lastX) / app->width;
+		app->camera->theta -= (ypos - app->lastY) / app->height;
+		app->camera->theta = std::fmax(0.001f, std::fmin(app->camera->theta, PI));
+		app->camchanged = true;
+	}
+	else if (app->rightMousePressed) {
+		app->camera->zoom += (ypos - app->lastY) / app->height;
+		app->camera->zoom = std::fmax(0.1f, app->camera->zoom);
+		app->camchanged = true;
+	}
+	else if (app->middleMousePressed) {
+		glm::vec3 forward = app->camera->view;
+		forward.y = 0.0f;
+		forward = glm::normalize(forward);
+		glm::vec3 right = app->camera->right;
+		right.y = 0.0f;
+		right = glm::normalize(right);
+
+		app->camera->lookAt -= (float)(xpos - app->lastX) * right * 0.01f;
+		app->camera->lookAt += (float)(ypos - app->lastY) * forward * 0.01f;
+		app->camchanged = true;
+	}
+	app->lastX = xpos;
+	app->lastY = ypos;
+}
+
 int main() {
 	app = new App();
 
 	glfwSetKeyCallback(app->window, keyCallback);
 	glfwSetMouseButtonCallback(app->window, mouseButtonCallback);
-	glfwSetCursorPosCallback(app->window, mouseMotionCallback);
-	glfwSetScrollCallback(app->window, mouseWheelCallback);
+	glfwSetCursorPosCallback(app->window, mousePositionCallback);
 
 	app->start();
 }
