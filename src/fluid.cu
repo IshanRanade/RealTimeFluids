@@ -165,6 +165,7 @@ __global__ void initializeGridCells(int n, GridCell *cells, int GRID_X, int GRID
 
 		GridCell &cell = cells[index];
 		cell.worldPosition = glm::vec3(coords.x * CELL_WIDTH, coords.y * CELL_WIDTH, coords.z * CELL_WIDTH);
+		cell.pressure = 2.0;
 	}
 }
 
@@ -503,6 +504,14 @@ __global__ void applyPressure(int numCells, GridCell* cells, int GRID_X, int GRI
 	}
 }
 
+__global__ void setCsrRowPtrA(int n, int *csrRowPtrA, int value) {
+	int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+	if (index == n - 1) {
+		csrRowPtrA[index] = value;
+	}
+}
+
 void initSim() {
 	// Allocate space for all of the grid cells
 	cudaMalloc(&dev_gridCells, NUM_CELLS * sizeof(GridCell));
@@ -513,12 +522,19 @@ void initSim() {
 	cudaMemset(dev_markerParticles, 0, NUM_MARKER_PARTICLES * sizeof(MarkerParticle));
 
 	// Allocate space for sparse linear solver of pressures
-	nnz = NUM_CELLS * 7;
+	nnz = NUM_CELLS * 1;
 	cudaMalloc(&csrValA, nnz * sizeof(float));
 	cudaMalloc(&csrRowPtrA, (NUM_CELLS + 1) * sizeof(int));
 	cudaMalloc(&csrColIndA, nnz * sizeof(int));
 	cudaMalloc(&vecX, NUM_CELLS * sizeof(float));
 	cudaMalloc(&vecB, NUM_CELLS * sizeof(float));
+
+	int numBlocks = (NUM_CELLS + 1 + blockSize - 1) / blockSize;
+	setCsrRowPtrA<<<numBlocks, blockSize>>>(NUM_CELLS + 1, csrRowPtrA, NUM_CELLS);
+	checkCUDAError("setting csrRowPtrA failed");
+	cudaDeviceSynchronize();
+
+	//cudaMemset(csrRowPtrA, (NUM_CELLS + 1), NUM_CELLS + 1);
 
 	// Create random world positions for all of the particles
 	generateRandomWorldPositionsForParticles<<<BLOCKS_PARTICLES, blockSize>>>(NUM_MARKER_PARTICLES, dev_markerParticles, GRID_X, GRID_Y, GRID_Z, CELL_WIDTH);
@@ -573,7 +589,6 @@ void iterateSim() {
 	cudaDeviceSynchronize();
 
 	// Calculate pressure
-	cudaMemset((void *)csrRowPtrA, nnz, NUM_CELLS + 1);
 	setupPressureCalc << <BLOCKS_CELLS, blockSize >> > (NUM_CELLS, csrValA, csrRowPtrA, csrColIndA, vecB, dev_gridCells, GRID_X, GRID_Y, GRID_Z, CELL_WIDTH / TIME_STEP);
 	checkCUDAError("setup pressure calc failed");
 	cudaDeviceSynchronize();
@@ -586,6 +601,7 @@ void iterateSim() {
 	cusparseMatDescr_t descrA;
 	cusparseCreateMatDescr(&descrA);
 	cusolver_status = cusolverSpScsrlsvqr(cusolver_handle, NUM_CELLS, nnz, descrA, csrValA, csrRowPtrA, csrColIndA, vecB, 1e-5, 0, vecX, &singularity);
+	std::cout << singularity << std::endl;
 	//std::cout << cusolver_status << std::endl;
 
 	copyPressureToCells << <BLOCKS_CELLS, blockSize >> > (NUM_CELLS, vecX, dev_gridCells);
