@@ -8,6 +8,8 @@
 #include <iostream>
 #include <thrust/random.h>
 #include <cuchar>
+#include <thrust/device_vector.h>
+#include <thrust/device_ptr.h>
 
 
 #define ERRORCHECK 1
@@ -529,12 +531,8 @@ void initSim() {
 	cudaMalloc(&vecX, NUM_CELLS * sizeof(float));
 	cudaMalloc(&vecB, NUM_CELLS * sizeof(float));
 
-	int numBlocks = (NUM_CELLS + 1 + blockSize - 1) / blockSize;
-	setCsrRowPtrA<<<numBlocks, blockSize>>>(NUM_CELLS + 1, csrRowPtrA, NUM_CELLS);
-	checkCUDAError("setting csrRowPtrA failed");
-	cudaDeviceSynchronize();
-
-	//cudaMemset(csrRowPtrA, (NUM_CELLS + 1), NUM_CELLS + 1);
+	thrust::device_ptr<int> csrRowPtrA_thrust(csrRowPtrA);
+	csrRowPtrA_thrust[NUM_CELLS] = NUM_CELLS;
 
 	// Create random world positions for all of the particles
 	generateRandomWorldPositionsForParticles<<<BLOCKS_PARTICLES, blockSize>>>(NUM_MARKER_PARTICLES, dev_markerParticles, GRID_X, GRID_Y, GRID_Z, CELL_WIDTH);
