@@ -7,6 +7,7 @@
 #include <device_launch_parameters.h>
 #include <iostream>
 #include <thrust/random.h>
+#include <glm/gtc/matrix_transform.hpp>
 
 
 #define ERRORCHECK 1
@@ -65,6 +66,52 @@ __global__ void fillVBOData(int n, void *vbo, MarkerParticle *particles) {
 	}
 }
 
+// Quadratic solver from scratchapixel.com
+__device__ bool solveQuadratic(const float &a, const float &b, const float &c, float &x0, float &x1) {
+    float discr = b * b - 4 * a * c;
+    if (discr < 0) return false;
+    else if (discr == 0) x0 = x1 = -0.5 * b / a;
+    else {
+        float q = (b > 0) ?
+            -0.5 * (b + sqrt(discr)) :
+            -0.5 * (b - sqrt(discr));
+        x0 = q / a;
+        x1 = c / q;
+    }
+    if (x0 > x1) {
+        float temp = x0;
+        x0 = x1;
+        x1 = temp;
+    }
+
+    return true;
+}
+
+// Ray-Sphere Intersection from scratchapixel.com
+__device__ float raySphereIntersect(glm::vec3 rayPos, glm::vec3 rayDir, glm::vec3 center, float radius2) {
+    float t0, t1; // solutions for t if the ray intersects
+    
+    // analytic solution
+    glm::vec3 L = rayPos - center;
+    float a = glm::dot(rayDir, rayDir);
+    float b = 2 * glm::dot(rayDir, L);
+    float c = glm::dot(L, L) - radius2;
+    if (!solveQuadratic(a, b, c, t0, t1)) return -1.0f;
+
+    if (t0 > t1) {
+        float temp = t0;
+        t0 = t1;
+        t1 = temp;
+    }
+
+    if (t0 < 0) {
+        t0 = t1; // if t0 is negative, let's use t1 instead 
+        if (t0 < 0) return -1.0f; // both t0 and t1 are negative 
+    }
+
+    return t0;
+}
+
 __device__ float smin(float a, float b, float k) {
   float h = glm::clamp(0.5f + 0.5f * (b - a) / k, 0.0f, 1.0f);
   return glm::mix(b, a, h) - k * h * (1.0f - h);
@@ -79,51 +126,70 @@ __device__ bool inBounds(float value, float bounds) {
 	return (value >= -bounds) && (value <= bounds);
 }
 
-__global__ void raymarchPBO(int numParticles, uchar4 *pbo, MarkerParticle *particles, glm::vec3 camPos, Camera camera) {
+__global__ void raycastPBO(int numParticles, uchar4 *pbo, MarkerParticle *particles, glm::vec3 camPos, Camera camera) {
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	int idy = blockIdx.y * blockDim.y + threadIdx.y;
 
 	if (idx < camera.resolution.x && idy < camera.resolution.y) {
         // Setup variables
-		int iterations = 0;
-		const int maxIterations = 16;
+        bool intersected = false;
 		glm::vec3 rayPos = camPos;
 		float distance = 1000.0f;
-		float epsilon = 1.25f;
 		glm::vec3 view = camera.view;
 		glm::vec3 up = camera.up;
 		glm::vec3 right = camera.right;
         glm::vec3 normal = glm::vec3(0, 1, 0);
 
-		float yscaled = glm::tan(camera.fov.y * (3.1415927f / 180.0f));
-		float xscaled = (yscaled *  camera.resolution.x) / camera.resolution.y;
-		glm::vec2 pixelLength = glm::vec2(2 * xscaled / camera.resolution.x, 2 * yscaled / camera.resolution.y);
+		//float yscaled = glm::tan(camera.fov.y * (3.1415927f / 180.0f));
+		//float xscaled = (yscaled *  camera.resolution.x) / camera.resolution.y;
+		//glm::vec2 pixelLength = glm::vec2(2 * xscaled / camera.resolution.x, 2 * yscaled / camera.resolution.y);
 
 		glm::vec3 rayDir = glm::normalize(view
-			- right * pixelLength.x * ((float)idx - camera.resolution.x * 0.5f)
-			- up * pixelLength.y * ((float)idy - camera.resolution.y * 0.5f)
+			- right * camera.pixelLength.x * ((float)idx - camera.resolution.x * 0.5f)
+			- up * camera.pixelLength.y * ((float)idy - camera.resolution.y * 0.5f)
 		);
 
+#if 1
+        // Ray-Sphere Intersection with all particles
+        for (int i = 0; i < numParticles; ++i) {
+            MarkerParticle& particle = particles[i];
+
+            float t = raySphereIntersect(rayPos, rayDir, particle.worldPosition, 0.25f);
+            if (t > 0 && t < distance) {
+                intersected = true;
+                distance = t;
+                normal = glm::normalize(rayPos + (rayDir * t) - particle.worldPosition);
+                
+            }
+        }
+        rayPos += rayDir * distance;
+
+#elif SPHERE_MARCH
+        int iterations = 0;
+        const int maxIterations = 16;
+        const float radius = 1.25f;
+
         // Sphere march for smoothed min marker particle
-		while(distance > epsilon && iterations < maxIterations) {
+		while(distance > radius && iterations < maxIterations) {
 			for(int i = 0; i < numParticles; ++i) {
 				MarkerParticle& particle = particles[i];
-				//if(particle.cellType == FLUID) {
                 //distance = glm::min(distance, glm::distance(rayPos, particle.worldPosition));
 				distance = smin(distance, glm::distance(rayPos, particle.worldPosition), 2.0f);
-				if(distance < epsilon) {
+				if(distance < radius) {
                     normal = glm::normalize(rayPos - particle.worldPosition);
 					break;
 				}
-				//}
 			}
 			rayPos += rayDir * distance;
 			++iterations;
 		}
+        intersected = distance < radius;
+#endif
+
 		int index = idx + idy * camera.resolution.x;
 
 		// Set the color
-		if(distance < epsilon) {
+		if(intersected) {
             // Ray hit a marker particle
             glm::vec3 color = glm::vec3(50.f, 50.f, 255.f);
 			float depth = glm::clamp(glm::distance(rayPos, camPos) / 10.0f, 0.0f, 1.0f);
@@ -140,7 +206,7 @@ __global__ void raymarchPBO(int numParticles, uchar4 *pbo, MarkerParticle *parti
 			pbo[index].w = 0;
 		}
         else {
-            // Probably clear background
+            // Clear background
             pbo[index].x = 205.0f;
             pbo[index].y = 205.0f;
             pbo[index].z = 240.0f;
@@ -149,12 +215,12 @@ __global__ void raymarchPBO(int numParticles, uchar4 *pbo, MarkerParticle *parti
 	}
 }
 
-void raymarchPBO(uchar4* pbo, glm::vec3 camPos, Camera camera) {
+void raycastPBO(uchar4* pbo, glm::vec3 camPos, Camera camera) {
 	const dim3 blockSize2d(8, 8);
 	const dim3 blocksPerGrid2d(
 		(camera.resolution.x + blockSize2d.x - 1) / blockSize2d.x,
 		(camera.resolution.y + blockSize2d.y - 1) / blockSize2d.y);
-	raymarchPBO<<<blocksPerGrid2d, blockSize2d >>>(NUM_MARKER_PARTICLES, pbo, dev_markerParticles, camPos, camera);
+	raycastPBO<<<blocksPerGrid2d, blockSize2d >>>(NUM_MARKER_PARTICLES, pbo, dev_markerParticles, camPos, camera);
 	checkCUDAError("raymarch to form PBO failed");
 	cudaDeviceSynchronize();
 }

@@ -34,7 +34,7 @@ static float KINEMATIC_VISCOSITY = 1.0f;
 static int NUM_CELLS = GRID_X * GRID_Y * GRID_Z;
 
 static float CELL_WIDTH = 1.0;
-static int NUM_MARKER_PARTICLES = 200;
+static int NUM_MARKER_PARTICLES = 2000;
 
 static int blockSize = 256;
 
@@ -54,4 +54,4 @@ static int BLOCKS_CELLS = (NUM_CELLS + blockSize - 1) / blockSize;
 void initSim();
 void iterateSim();
 void fillVBOsWithMarkerParticles(void *vbo);
-void raymarchPBO(uchar4* pbo, glm::vec3 camPos, Camera camera);
+void raycastPBO(uchar4* pbo, glm::vec3 camPos, Camera camera);

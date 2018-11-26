@@ -146,7 +146,7 @@ void runCuda() {
 		/*if(iteration < 1000)
 			timer().startCpuTimer();*/
 		iterateSim();
-		raymarchPBO(pbo_dptr, cameraPosition, renderState->camera);
+        raycastPBO(pbo_dptr, cameraPosition, renderState->camera);
 		/*if (iteration <= 1000) {
 			timer().endCpuTimer();
 			totalTime += timer().getCpuElapsedTimeForPreviousOperation();
