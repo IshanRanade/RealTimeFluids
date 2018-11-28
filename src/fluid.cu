@@ -1,4 +1,5 @@
 #include "fluid.h"
+#include "hierarchy.h"
 
 #include <cuda_runtime.h>
 #include <cuda.h>
@@ -216,13 +217,26 @@ __global__ void raycastPBO(int numParticles, uchar4 *pbo, MarkerParticle *partic
 }
 
 void raycastPBO(uchar4* pbo, glm::vec3 camPos, Camera camera) {
+	/*
+	// Initialize 3D quad tree hierarchy
+	TreeNode* root = buildTree(std::vector<MarkerParticle> particles, int currentDepth, glm::vec3 boundMin, glm::vec3 boundMax);
+	int numNodes = tree::treeSize(root);
+	std::vector<LinearNode> flatTree;
+	for (int i = 0; i < n; i++) {
+		flatTree.push_back(LinearNode());
+	}
+	int offset = 0;
+	flattenTree(root, sortedGeoms, flatTree, &offset);
+	deleteTree(root);
+	*/
+
 	const dim3 blockSize2d(8, 8);
 	const dim3 blocksPerGrid2d(
 		(camera.resolution.x + blockSize2d.x - 1) / blockSize2d.x,
 		(camera.resolution.y + blockSize2d.y - 1) / blockSize2d.y);
 	raycastPBO<<<blocksPerGrid2d, blockSize2d >>>(NUM_MARKER_PARTICLES, pbo, dev_markerParticles, camPos, camera);
 	checkCUDAError("raymarch to form PBO failed");
-	cudaDeviceSynchronize();
+	cudaDeviceSynchronize();	
 }
 
 __global__ void initializeGridCells(int n, GridCell *cells, int GRID_X, int GRID_Y, int GRID_Z, float CELL_WIDTH) {

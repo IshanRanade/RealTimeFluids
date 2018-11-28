@@ -17,6 +17,8 @@ set(SOURCE_FILES
     "utilities.h"
     "fluid.cu"
     "fluid.h"
+    "hierarchy.h"
+    "hierarchy.cpp"
     )
 
 cuda_add_library(src

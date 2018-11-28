@@ -38,6 +38,8 @@ static int NUM_MARKER_PARTICLES = 2000;
 
 static int blockSize = 256;
 
+static float PARTICLE_RADIUS = 0.25f;
+
 static GridCell* dev_gridCells;
 static MarkerParticle* dev_markerParticles;
 
