@@ -314,7 +314,7 @@ __global__ void generateRandomWorldPositionsForParticles(int n, MarkerParticle *
 //
 //}
 
-__global__ void backwardsParticleTrace(int n, GridCell *cells) {
+__global__ void backwardsParticleTrace(int n, GridCell* cells) {
     const int index = blockIdx.x * blockDim.x + threadIdx.x;
 
 	if (index < n) {
@@ -407,7 +407,7 @@ __global__ void swapCellVelocities(int n, GridCell *cells) {
 	}
 }
 
-__global__ void setupPressureCalc(int numCells, float* csrValA, int* csrRowPtrA, int* csrColIndA, float* vecB, GridCell* cells) {
+/*__global__ void setupPressureCalc(int numCells, float* csrValA, int* csrRowPtrA, int* csrColIndA, float* vecB, GridCell* cells) {
     const int index = blockIdx.x * blockDim.x + threadIdx.x;
 
 	if (index > 10 && index < 12) {
@@ -455,6 +455,10 @@ __global__ void setupPressureCalc(int numCells, float* csrValA, int* csrRowPtrA,
 		}
 		vecB[index] = (WIDTH_DIV_TIME) * divU - airCells;
 	}
+}*/
+
+__global__ void gaussSeidelPressure(Grid grid) {
+    const int index = blockIdx.x * blockDim.x + threadIdx.x;
 }
 
 __global__ void copyPressureToCells(int numCells, float* vecX, GridCell* cells) {
@@ -466,7 +470,7 @@ __global__ void copyPressureToCells(int numCells, float* vecX, GridCell* cells) 
 }
 
 void initHierarchicalPressureGrids() {
-    // Calculate number of grid levels`
+    // Calculate number of grid levels
     GRID_LEVELS = std::floor(log2(std::min(std::min(GRID_X, GRID_Y), GRID_Z)));
 
     // Allocate space for primary grid cells
@@ -474,13 +478,29 @@ void initHierarchicalPressureGrids() {
 
     // Create grid array and primary grid
     grids = new Grid[GRID_LEVELS];
-    grids[0].setGrid(0, GRID_X, GRID_Y, GRID_Z);
+    grids[0].level = 0;
+    grids[0].gridX = GRID_X;
+    grids[0].gridY = GRID_Y;
+    grids[0].gridZ = GRID_Z;
+    grids[0].numCells = NUM_CELLS;
     grids[0].dev_cells = dev_gridCells;
+    cudaMalloc(&grids[0].dev_nnzA, NUM_CELLS * 7 * sizeof(float));
+    cudaMalloc(&grids[0].dev_colIndA, NUM_CELLS * sizeof(float));
+    cudaMalloc(&grids[0].dev_X, NUM_CELLS * sizeof(float));
+    cudaMalloc(&grids[0].dev_B, NUM_CELLS * sizeof(float));
 
     for(int d = 1; d < GRID_LEVELS; ++d) {
         // Create and allocate space for sub grid cells
-        grids[d].setGrid(d, grids[d - 1].gridX / 2, grids[d - 1].gridY / 2, grids[d - 1].gridZ / 2);
+        grids[0].level = d;
+        grids[0].gridX = grids[d - 1].gridX / 2;
+        grids[0].gridY = grids[d - 1].gridY / 2;
+        grids[0].gridZ = grids[d - 1].gridZ / 2;
+        grids[0].numCells = grids[0].gridX * grids[0].gridY * grids[0].gridZ;
         cudaMalloc(&grids[d].dev_cells, grids[d].numCells * sizeof(GridCell));
+        cudaMalloc(&grids[d].dev_nnzA, grids[d].numCells * 7 * sizeof(float));
+        cudaMalloc(&grids[d].dev_colIndA, grids[d].numCells * sizeof(float));
+        cudaMalloc(&grids[d].dev_X, NUM_CELLS * sizeof(float));
+        cudaMalloc(&grids[d].dev_B, NUM_CELLS * sizeof(float));
     }
 }
 

@@ -25,16 +25,13 @@ static struct MarkerParticle {
 
 static struct Grid {
     GridCell* dev_cells;
+    float* dev_nnzA;
+    int* dev_colIndA;
+    float* dev_X;
+    float* dev_B;
+
     int level;
     int gridX, gridY, gridZ, numCells;
-
-    void setGrid(int newLevel, int newX, int newY, int newZ) {
-        level = newLevel;
-        gridX = newX;
-        gridY = newY;
-        gridZ = newZ;
-        numCells = gridX * gridY * gridZ;
-    }
 };
 
 #define RAY_CAST 1
@@ -64,12 +61,12 @@ static MarkerParticle* dev_markerParticles;
 static Grid* grids;
 static int GRID_LEVELS;
 
-static int nnz;
+/*static int nnz;
 static float* csrValA;
 static int* csrRowPtrA;
 static int* csrColIndA;
 static float* vecB;
-static float* vecX;
+static float* vecX;*/
 
 void initSim();
 void iterateSim();
