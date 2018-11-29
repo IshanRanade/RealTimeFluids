@@ -1,7 +1,8 @@
 #pragma once
 
-#include <glm/glm.hpp>
 #include "app.h"
+
+#include <glm/glm.hpp>
 
 static enum CellType {
 	FLUID,
@@ -22,11 +23,11 @@ static struct MarkerParticle {
 	glm::vec3 color;
 };
 
-static float TIME_STEP = 1.0 / 100.0;
+static float TIME_STEP = 1.0f / 30.0f;
 
-static int GRID_X = 16;
+static int GRID_X = 32;
 static int GRID_Y = 32;
-static int GRID_Z = 16;
+static int GRID_Z = 32;
 
 static float DENSITY = 1.0;
 static float KINEMATIC_VISCOSITY = 1.0f;
@@ -34,9 +35,11 @@ static float KINEMATIC_VISCOSITY = 1.0f;
 static int NUM_CELLS = GRID_X * GRID_Y * GRID_Z;
 
 static float CELL_WIDTH = 1.0;
-static int NUM_MARKER_PARTICLES = 64000;
+static int NUM_MARKER_PARTICLES = 4000;
 
 static int blockSize = 256;
+
+static float PARTICLE_RADIUS = 0.25f;
 
 static GridCell* dev_gridCells;
 static MarkerParticle* dev_markerParticles;
@@ -53,5 +56,5 @@ static int BLOCKS_CELLS = (NUM_CELLS + blockSize - 1) / blockSize;
 
 void initSim();
 void iterateSim();
-void raymarchPBO(void* pbo, glm::vec3 camPos, Camera camera);
 void fillVBOsWithMarkerParticles(void *vbo);
+void raycastPBO(uchar4* pbo, glm::vec3 camPos, Camera camera);

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.1)
 
-project(cis565_rasterizer)
+project(real_time_fluids)
 
 set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
 

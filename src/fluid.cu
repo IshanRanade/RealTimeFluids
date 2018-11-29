@@ -1,4 +1,5 @@
 #include "fluid.h"
+//#include "hierarchy.h"
 
 #include <cuda_runtime.h>
 #include <cuda.h>
@@ -7,15 +8,13 @@
 #include <device_launch_parameters.h>
 #include <iostream>
 #include <thrust/random.h>
-#include <cuchar>
-#include <thrust/device_vector.h>
-#include <thrust/device_ptr.h>
+#include <glm/gtc/matrix_transform.hpp>
 
 
 #define ERRORCHECK 1
 #define FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
-#define checkCUDAError(msg) checkCUDAErrorFn(msg, FILENAME, __LINE__)
-void checkCUDAErrorFn(const char *msg, const char *file, int line) {
+#define checkCUDAError(msg) checkCUDAErrorFn2(msg, FILENAME, __LINE__)
+void checkCUDAErrorFn2(const char *msg, const char *file, int line) {
 #if ERRORCHECK
 	cudaDeviceSynchronize();
 	cudaError_t err = cudaGetLastError();
@@ -68,32 +67,79 @@ __global__ void fillVBOData(int n, void *vbo, MarkerParticle *particles) {
 	}
 }
 
+// Quadratic solver from scratchapixel.com
+__device__ bool solveQuadratic(const float &a, const float &b, const float &c, float &x0, float &x1) {
+    float discr = b * b - 4 * a * c;
+    if (discr < 0) return false;
+    else if (discr == 0) x0 = x1 = -0.5 * b / a;
+    else {
+        float q = (b > 0) ?
+            -0.5 * (b + sqrt(discr)) :
+            -0.5 * (b - sqrt(discr));
+        x0 = q / a;
+        x1 = c / q;
+    }
+    if (x0 > x1) {
+        float temp = x0;
+        x0 = x1;
+        x1 = temp;
+    }
+
+    return true;
+}
+
+// Ray-Sphere Intersection from scratchapixel.com
+__device__ float raySphereIntersect(glm::vec3 rayPos, glm::vec3 rayDir, glm::vec3 center, float radius2) {
+    float t0, t1; // solutions for t if the ray intersects
+    
+    // analytic solution
+    glm::vec3 L = rayPos - center;
+    float a = glm::dot(rayDir, rayDir);
+    float b = 2 * glm::dot(rayDir, L);
+    float c = glm::dot(L, L) - radius2;
+    if (!solveQuadratic(a, b, c, t0, t1)) return -1.0f;
+
+    if (t0 > t1) {
+        float temp = t0;
+        t0 = t1;
+        t1 = temp;
+    }
+
+    if (t0 < 0) {
+        t0 = t1; // if t0 is negative, let's use t1 instead 
+        if (t0 < 0) return -1.0f; // both t0 and t1 are negative 
+    }
+
+    return t0;
+}
+
 __device__ float smin(float a, float b, float k) {
-	float h = glm::clamp(0.5f + 0.5f * (b - a) / k, 0.0f, 1.0f);
-	return glm::mix(b, a, h) - k * h * (1.0f - h);
+  float h = glm::clamp(0.5f + 0.5f * (b - a) / k, 0.0f, 1.0f);
+  return glm::mix(b, a, h) - k * h * (1.0f - h);
 }
 
 __device__ glm::vec4 smin(glm::vec3 vecA, glm::vec3 vecB, float a, float b, float k) {
-	float h = glm::clamp(0.5f + 0.5f * (b - a) / k, 0.0f, 1.0f);
-	return glm::vec4(glm::mix(vecA, vecB, h), glm::mix(b, a, h) - k * h * (1.0f - h));
+    float h = glm::clamp(0.5f + 0.5f * (b - a) / k, 0.0f, 1.0f);
+    return glm::vec4(glm::mix(vecA, vecB, h), glm::mix(b, a, h) - k * h * (1.0f - h));
 }
 
-__global__ void raymarchPBO(int numParticles, uchar4 *pbo, MarkerParticle *particles, glm::vec3 camPos, Camera camera) {
-	int index = blockIdx.x * blockDim.x + threadIdx.x;
+__device__ bool inBounds(float value, float bounds) {
+	return (value >= -bounds) && (value <= bounds);
+}
 
-	if (index < camera.resolution.x * camera.resolution.y) {
-		// Setup variables
-		int idx = index / camera.resolution.x;
-		int idy = index % camera.resolution.y;
-		int iterations = 0;
-		const int maxIterations = 4;
+__global__ void raycastPBO(int numParticles, uchar4 *pbo, MarkerParticle *particles, glm::vec3 camPos, Camera camera) {
+	int idx = blockIdx.x * blockDim.x + threadIdx.x;
+	int idy = blockIdx.y * blockDim.y + threadIdx.y;
+
+	if (idx < camera.resolution.x && idy < camera.resolution.y) {
+        // Setup variables
+        bool intersected = false;
 		glm::vec3 rayPos = camPos;
 		float distance = 1000.0f;
-		float epsilon = 1.25f;
 		glm::vec3 view = camera.view;
 		glm::vec3 up = camera.up;
 		glm::vec3 right = camera.right;
-		glm::vec3 normal = glm::vec3(0, 1, 0);
+        glm::vec3 normal = glm::vec3(0, 1, 0);
 
 		float yscaled = glm::tan(camera.fov.y * (3.1415927f / 180.0f));
 		float xscaled = (yscaled *  camera.resolution.x) / camera.resolution.y;
@@ -104,56 +150,93 @@ __global__ void raymarchPBO(int numParticles, uchar4 *pbo, MarkerParticle *parti
 			- up * pixelLength.y * ((float)idy - camera.resolution.y * 0.5f)
 		);
 
-		// Sphere march for smoothed min marker particle
-		while (distance > epsilon && iterations < maxIterations) {
-			for (int i = 0; i < numParticles; ++i) {
+#if 1
+        // Ray-Sphere Intersection with all particles
+        for (int i = 0; i < numParticles; ++i) {
+            MarkerParticle& particle = particles[i];
+
+            float t = raySphereIntersect(rayPos, rayDir, particle.worldPosition, 2.0f);
+            if (t > 0 && t < distance) {
+                intersected = true;
+                distance = t;
+                normal = glm::normalize(rayPos + (rayDir * t) - particle.worldPosition);
+                
+            }
+        }
+        rayPos += rayDir * distance;
+
+#elif SPHERE_MARCH
+        int iterations = 0;
+        const int maxIterations = 16;
+        const float radius = 1.25f;
+
+        // Sphere march for smoothed min marker particle
+		while(distance > radius && iterations < maxIterations) {
+			for(int i = 0; i < numParticles; ++i) {
 				MarkerParticle& particle = particles[i];
-				//if(particle.cellType == FLUID) {
-				//distance = glm::min(distance, glm::distance(rayPos, particle.worldPosition));
+                //distance = glm::min(distance, glm::distance(rayPos, particle.worldPosition));
 				distance = smin(distance, glm::distance(rayPos, particle.worldPosition), 2.0f);
-				if (distance < epsilon) {
-					normal = glm::normalize(rayPos - particle.worldPosition);
+				if(distance < radius) {
+                    normal = glm::normalize(rayPos - particle.worldPosition);
 					break;
 				}
-				//}
 			}
 			rayPos += rayDir * distance;
 			++iterations;
 		}
+        intersected = distance < radius;
+#endif
+
 		int index = idx + idy * camera.resolution.x;
 
 		// Set the color
-		if (distance < epsilon) {
-			// Ray hit a marker particle
-			glm::vec3 color = glm::vec3(50.f, 50.f, 255.f);
+		if(intersected) {
+            // Ray hit a marker particle
+            glm::vec3 color = glm::vec3(50.f, 50.f, 255.f);
 			float depth = glm::clamp(glm::distance(rayPos, camPos) / 10.0f, 0.0f, 1.0f);
-			glm::vec3 lightPos = glm::vec3(2, 1, 0);
-			float specularIntensity = 10.0f;
+            glm::vec3 lightPos = glm::vec3(2, 1, 0);
+            float specularIntensity = 10.0f;
 
-			glm::vec3 refl = glm::normalize(glm::normalize(camPos - rayPos) + glm::normalize(lightPos));
-			float specularTerm = glm::pow(glm::max(glm::dot(refl, normal), 0.0f), specularIntensity);
+            glm::vec3 refl = glm::normalize(glm::normalize(camPos - rayPos) + glm::normalize(lightPos));
+            float specularTerm = glm::pow(glm::max(glm::dot(refl, normal), 0.0f), specularIntensity);
 
-			color = color * (depth + specularTerm);
+            color = color * (depth + specularTerm);
 			pbo[index].x = glm::min(color.x, 255.0f);
 			pbo[index].y = glm::min(color.y, 255.0f);
 			pbo[index].z = glm::min(color.z, 255.0f);
 			pbo[index].w = 0;
 		}
-		else {
-			// Probably clear background
-			pbo[index].x = 205.0f;
-			pbo[index].y = 205.0f;
-			pbo[index].z = 240.0f;
-			pbo[index].w = 0;
-		}
+        else {
+            // Clear background
+            pbo[index].x = 205.0f;
+            pbo[index].y = 205.0f;
+            pbo[index].z = 240.0f;
+            pbo[index].w = 0;
+        }
 	}
 }
 
-void raymarchPBO(void* pbo, glm::vec3 camPos, Camera camera) {
-	int blocks = (camera.resolution.x * camera.resolution.y + blockSize - 1) / blockSize;
-	raymarchPBO << <blocks, blockSize >> > (NUM_MARKER_PARTICLES, (uchar4*)pbo, dev_markerParticles, camPos, camera);
+void raycastPBO(uchar4* pbo, glm::vec3 camPos, Camera camera) {
+	/*
+	// Initialize 3D quad tree hierarchy
+	TreeNode* root = buildTree(std::vector<MarkerParticle> particles, int currentDepth, glm::vec3 boundMin, glm::vec3 boundMax);
+	int numNodes = tree::treeSize(root);
+	std::vector<LinearNode> flatTree;
+	for (int i = 0; i < n; i++) {
+		flatTree.push_back(LinearNode());
+	}
+	int offset = 0;
+	flattenTree(root, sortedGeoms, flatTree, &offset);
+	deleteTree(root);
+	*/
+
+	const dim3 blockSize2d(8, 8);
+	const dim3 blocksPerGrid2d(
+		(camera.resolution.x + blockSize2d.x - 1) / blockSize2d.x,
+		(camera.resolution.y + blockSize2d.y - 1) / blockSize2d.y);
+	raycastPBO<<<blocksPerGrid2d, blockSize2d >>>(NUM_MARKER_PARTICLES, pbo, dev_markerParticles, camPos, camera);
 	checkCUDAError("raymarch to form PBO failed");
-	cudaDeviceSynchronize();
+	cudaDeviceSynchronize();	
 }
 
 __global__ void initializeGridCells(int n, GridCell *cells, int GRID_X, int GRID_Y, int GRID_Z, float CELL_WIDTH) {
@@ -167,7 +250,6 @@ __global__ void initializeGridCells(int n, GridCell *cells, int GRID_X, int GRID
 
 		GridCell &cell = cells[index];
 		cell.worldPosition = glm::vec3(coords.x * CELL_WIDTH, coords.y * CELL_WIDTH, coords.z * CELL_WIDTH);
-		cell.pressure = 2.0;
 	}
 }
 
@@ -324,121 +406,23 @@ __global__ void swapCellVelocities(int n, GridCell *cells) {
 	}
 }
 
-__global__ void swapCellPressures(int n, GridCell *cells) {
-	int index = blockIdx.x * blockDim.x + threadIdx.x;
-
-	if (index < n) {
-		GridCell &cell = cells[index];
-		cell.pressure = cell.tempPressure;
-	}
-}
-
 __global__ void setupPressureCalc(int numCells, float* csrValA, int* csrRowPtrA, int* csrColIndA, float* vecB, GridCell* cells, int GRID_X, int GRID_Y, int GRID_Z, float WidthDivTime) {
 	int index = blockIdx.x * blockDim.x + threadIdx.x;
 
-	if (index < numCells) {
+	if (index > 10 && index < 12) {
 		glm::vec3 gridPos = getCellUncompressedCoordinates(index, GRID_X, GRID_Y, GRID_Z);
 
 		// Starting index of current row
-		csrRowPtrA[index] = index * 7;
-		
-		int nonSolid = 0;
+		csrRowPtrA[index] = index * 27;
 
-		int indices[7] = {
-			getCellCompressedIndex(gridPos.x, gridPos.y, gridPos.z - 1, GRID_X, GRID_Y, GRID_Z),
-			getCellCompressedIndex(gridPos.x, gridPos.y - 1, gridPos.z, GRID_X, GRID_Y, GRID_Z),
-			getCellCompressedIndex(gridPos.x - 1, gridPos.y, gridPos.z, GRID_X, GRID_Y, GRID_Z),
-			index,
-			getCellCompressedIndex(gridPos.x + 1, gridPos.y, gridPos.z, GRID_X, GRID_Y, GRID_Z),
-			getCellCompressedIndex(gridPos.x, gridPos.y + 1, gridPos.z, GRID_X, GRID_Y, GRID_Z),
-			getCellCompressedIndex(gridPos.x, gridPos.y, gridPos.z + 1, GRID_X, GRID_Y, GRID_Z),
-		};
-
-		for (int i = 0; i < 7; i++) {
-			int nextIndex = indices[i];
-
-			if (nextIndex >= 0 && nextIndex < GRID_X*GRID_Y*GRID_Z) {
-				if (nextIndex == 3) {
-					csrValA[index * 7 + i] = -4;
-				}
-				else {
-					csrValA[index * 7 + i] = 1;
-				}
-				csrColIndA[index * 7 + i] = nextIndex;
-			}
-			else {
-				csrValA[index * 7 + i] = 0;
-				csrColIndA[index * 7 + i] = index;
-			}
-		}
-
-		float deltaU = 0.0f;
-		int dIndex = getCellCompressedIndex(gridPos.x + 1, gridPos.y, gridPos.z, GRID_X, GRID_Y, GRID_Z);
-		if (dIndex >= 0 && dIndex < GRID_X * GRID_Y * GRID_Z) {
-			deltaU += cells[dIndex].velocity.x - cells[index].velocity.x;
-		}
-
-		dIndex = getCellCompressedIndex(gridPos.x, gridPos.y + 1, gridPos.z, GRID_X, GRID_Y, GRID_Z);
-		if (dIndex >= 0 && dIndex < GRID_X * GRID_Y * GRID_Z) {
-			deltaU += cells[dIndex].velocity.y - cells[index].velocity.y;
-		}
-
-		dIndex = getCellCompressedIndex(gridPos.x, gridPos.y, gridPos.z + 1, GRID_X, GRID_Y, GRID_Z);
-		if (dIndex >= 0 && dIndex < GRID_X * GRID_Y * GRID_Z) {
-			deltaU += cells[dIndex].velocity.z - cells[index].velocity.z;
-		}
-		vecB[index] = dIndex * WidthDivTime - 2.0f;
-
-		/*
-		int nextIndex = getCellCompressedIndex(gridPos.x + 1, gridPos.y, gridPos.z, GRID_X, GRID_Y, GRID_Z);
-		if (nextIndex >= 0 && nextIndex < GRID_X * GRID_Y * GRID_Z) {
-			csrValA[index * 7 + 0] = 1;
-			csrColIndA[index * 7 + 0] = nextIndex;
-		}
-
-		nextIndex = getCellCompressedIndex(gridPos.x - 1, gridPos.y, gridPos.z, GRID_X, GRID_Y, GRID_Z);
-		if (nextIndex >= 0 && nextIndex < GRID_X * GRID_Y * GRID_Z) {
-			csrValA[index * 7 + 1] = 1;
-			csrColIndA[index * 7 + 1] = nextIndex;
-		}
-
-		nextIndex = getCellCompressedIndex(gridPos.x, gridPos.y + 1, gridPos.z, GRID_X, GRID_Y, GRID_Z);
-		if (nextIndex >= 0 && nextIndex < GRID_X * GRID_Y * GRID_Z) {
-			csrValA[index * 7 + 2] = 1;
-			csrColIndA[index * 7 + 2] = nextIndex;
-		}
-
-		nextIndex = getCellCompressedIndex(gridPos.x, gridPos.y - 1, gridPos.z, GRID_X, GRID_Y, GRID_Z);
-		if (nextIndex >= 0 && nextIndex < GRID_X * GRID_Y * GRID_Z) {
-			csrValA[index * 7 + 3] = 1;
-			csrColIndA[index * 7 + 3] = nextIndex;
-		}
-
-		nextIndex = getCellCompressedIndex(gridPos.x, gridPos.y, gridPos.z + 1, GRID_X, GRID_Y, GRID_Z);
-		if (nextIndex >= 0 && nextIndex < GRID_X * GRID_Y * GRID_Z) {
-			csrValA[index * 7 + 4] = 1;
-			csrColIndA[index * 7 + 4] = nextIndex;
-		}
-
-		nextIndex = getCellCompressedIndex(gridPos.x, gridPos.y, gridPos.z - 1, GRID_X, GRID_Y, GRID_Z);
-		if (nextIndex >= 0 && nextIndex < GRID_X * GRID_Y * GRID_Z) {
-			csrValA[index * 7 + 5] = 1;
-			csrColIndA[index * 7 + 5] = nextIndex;
-		}
-
-		csrValA[index * 7 + 6] = -4;
-		csrColIndA[nextIndex * 7 + 5] = nextIndex;
-
-		*/
-		/*
 		int nonSolid = -26;
 		float airCells = 0.0f;
 		for (int i = 0; i < 26; ++i) {
 			int x = i % 3 - 1;
 			int y = (i / 3) % 3 - 1;
 			int z = i / 9 - 1;
-			int adjacent = getCellCompressedIndex(gridPos.x + x, gridPos.y + y, gridPos.z + z, GRID_X, GRID_Y, GRID_Z);
-			if(adjacent >= 0 && adjacent < GRID_X * GRID_Y * GRID_Z) {
+			int adjacent = index + x + (y * GRID_X) + (z * GRID_X * GRID_Y);
+			if (gridPos.x + x < 0 || gridPos.x + x >= GRID_X || gridPos.y + y < 0 || gridPos.y + y >= GRID_Y || gridPos.x + x < 0 || gridPos.z + z >= GRID_Z) {
 				csrColIndA[index * 27 + i] = 0;
 				csrRowPtrA[index * 27 + i] = 0;
 				++nonSolid;
@@ -468,7 +452,7 @@ __global__ void setupPressureCalc(int numCells, float* csrValA, int* csrRowPtrA,
 		if (gridPos.z - 1 > 0) {
 			divU += cells[index - GRID_X * GRID_Y].velocity.x - cells[index].velocity.x;
 		}
-		vecB[index] = (WidthDivTime) * divU - airCells;*/
+		vecB[index] = (WidthDivTime) * divU - airCells;
 	}
 }
 
@@ -477,40 +461,6 @@ __global__ void copyPressureToCells(int numCells, float* vecX, GridCell* cells) 
 	if (index < numCells) {
 		printf("%d: %f\n", index, vecX[index]);
 		cells[index].pressure = vecX[index];
-	}
-}
-
-__global__ void applyPressure(int numCells, GridCell* cells, int GRID_X, int GRID_Y, int GRID_Z, float TIME_STEP, float DENSITY, float CELL_WIDTH) {
-	int index = blockIdx.x * blockDim.x + threadIdx.x;
-
-	if (index < numCells) {
-		glm::vec3 gridPos = getCellUncompressedCoordinates(index, GRID_X, GRID_Y, GRID_Z);
-
-		glm::vec3 deltaPressure = glm::vec3(0.0f, 0.0f, 0.0f);
-		int nextPos = getCellCompressedIndex((int)(gridPos.x - 1), (int)gridPos.y, (int)gridPos.z, GRID_X, GRID_Y, GRID_Z);
-		if (nextPos >= 0 && nextPos < GRID_X * GRID_Y * GRID_Z) {
-			deltaPressure[0] = cells[index].pressure - cells[nextPos].pressure;
-		}
-
-		nextPos = getCellCompressedIndex((int)(gridPos.x), (int)(gridPos.y - 1), (int)gridPos.z, GRID_X, GRID_Y, GRID_Z);
-		if (nextPos >= 0 && nextPos < GRID_X * GRID_Y * GRID_Z) {
-			deltaPressure[1] = cells[index].pressure - cells[nextPos].pressure;
-		}
-
-		nextPos = getCellCompressedIndex((int)(gridPos.x), (int)gridPos.y, (int)(gridPos.z - 1), GRID_X, GRID_Y, GRID_Z);
-		if (nextPos >= 0 && nextPos < GRID_X * GRID_Y * GRID_Z) {
-			deltaPressure[2] = cells[index].pressure - cells[nextPos].pressure;
-		}
-
-		cells[index].tempVelocity = cells[index].velocity - TIME_STEP * deltaPressure / (DENSITY * CELL_WIDTH);
-	}
-}
-
-__global__ void setCsrRowPtrA(int n, int *csrRowPtrA, int value) {
-	int index = blockIdx.x * blockDim.x + threadIdx.x;
-
-	if (index == n - 1) {
-		csrRowPtrA[index] = value;
 	}
 }
 
@@ -524,15 +474,12 @@ void initSim() {
 	cudaMemset(dev_markerParticles, 0, NUM_MARKER_PARTICLES * sizeof(MarkerParticle));
 
 	// Allocate space for sparse linear solver of pressures
-	nnz = NUM_CELLS * 1;
+	/*nnz = NUM_CELLS * 27;
 	cudaMalloc(&csrValA, nnz * sizeof(float));
-	cudaMalloc(&csrRowPtrA, (NUM_CELLS + 1) * sizeof(int));
+	cudaMalloc(&csrRowPtrA, NUM_CELLS * sizeof(int));
 	cudaMalloc(&csrColIndA, nnz * sizeof(int));
 	cudaMalloc(&vecX, NUM_CELLS * sizeof(float));
-	cudaMalloc(&vecB, NUM_CELLS * sizeof(float));
-
-	thrust::device_ptr<int> csrRowPtrA_thrust(csrRowPtrA);
-	csrRowPtrA_thrust[NUM_CELLS] = NUM_CELLS;
+	cudaMalloc(&vecB, NUM_CELLS * sizeof(float));*/
 
 	// Create random world positions for all of the particles
 	generateRandomWorldPositionsForParticles<<<BLOCKS_PARTICLES, blockSize>>>(NUM_MARKER_PARTICLES, dev_markerParticles, GRID_X, GRID_Y, GRID_Z, CELL_WIDTH);
@@ -587,7 +534,7 @@ void iterateSim() {
 	cudaDeviceSynchronize();
 
 	// Calculate pressure
-	setupPressureCalc << <BLOCKS_CELLS, blockSize >> > (NUM_CELLS, csrValA, csrRowPtrA, csrColIndA, vecB, dev_gridCells, GRID_X, GRID_Y, GRID_Z, CELL_WIDTH / TIME_STEP);
+	/*setupPressureCalc << <BLOCKS_CELLS, blockSize >> > (NUM_CELLS, csrValA, csrRowPtrA, csrColIndA, vecB, dev_gridCells, GRID_X, GRID_Y, GRID_Z, CELL_WIDTH / TIME_STEP);
 	checkCUDAError("setup pressure calc failed");
 	cudaDeviceSynchronize();
 
@@ -599,22 +546,12 @@ void iterateSim() {
 	cusparseMatDescr_t descrA;
 	cusparseCreateMatDescr(&descrA);
 	cusolver_status = cusolverSpScsrlsvqr(cusolver_handle, NUM_CELLS, nnz, descrA, csrValA, csrRowPtrA, csrColIndA, vecB, 1e-5, 0, vecX, &singularity);
-	std::cout << singularity << std::endl;
-	//std::cout << cusolver_status << std::endl;
 
 	copyPressureToCells << <BLOCKS_CELLS, blockSize >> > (NUM_CELLS, vecX, dev_gridCells);
 	checkCUDAError("copy pressure to cells failed");
-	cudaDeviceSynchronize();
+	cudaDeviceSynchronize();*/
 
 	// Apply pressure
-	applyPressure<<<BLOCKS_CELLS, blockSize>>>(NUM_CELLS, dev_gridCells, GRID_X, GRID_Y, GRID_Z, TIME_STEP, DENSITY, CELL_WIDTH);
-	checkCUDAError("applying pressure to cell velocities failed");
-	cudaDeviceSynchronize();
-
-	// Set each cell velocity to be the temp velocity, needed since previous step had to save old velocities during calculations
-	swapCellVelocities << <BLOCKS_CELLS, blockSize >> > (NUM_CELLS, dev_gridCells);
-	checkCUDAError("swapping velocities in cells failed");
-	cudaDeviceSynchronize();
 
 	// Extrapolate fluid velocities into surrounding cells
 
