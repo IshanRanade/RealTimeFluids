@@ -23,23 +23,26 @@ static struct MarkerParticle {
 	glm::vec3 color;
 };
 
-static float TIME_STEP = 1.0f / 30.0f;
+#define RAY_CAST 1
+#define TIME_STEP (1.0f / 30.0f)
 
-static int GRID_X = 32;
-static int GRID_Y = 32;
-static int GRID_Z = 32;
+#define GRID_X 128
+#define GRID_Y 128
+#define GRID_Z 128
 
-static float DENSITY = 1.0;
-static float KINEMATIC_VISCOSITY = 1.0f;
+#define NUM_CELLS (GRID_X * GRID_Y * GRID_Z)
+#define CELL_WIDTH 1.0f
+#define WIDTH_DIV_TIME (CELL_WIDTH / TIME_STEP)
 
-static int NUM_CELLS = GRID_X * GRID_Y * GRID_Z;
+#define NUM_MARKER_PARTICLES 2000
+#define PARTICLE_RADIUS 3.0f
 
-static float CELL_WIDTH = 1.0;
-static int NUM_MARKER_PARTICLES = 4000;
+#define DENSITY 1.0f
+#define VISCOSITY 1.0f
 
-static int blockSize = 256;
-
-static float PARTICLE_RADIUS = 0.25f;
+#define BLOCK_SIZE 256
+#define BLOCKS_PARTICLES ((NUM_MARKER_PARTICLES + BLOCK_SIZE - 1) / BLOCK_SIZE)
+#define BLOCKS_CELLS ((NUM_CELLS + BLOCK_SIZE - 1) / BLOCK_SIZE)
 
 static GridCell* dev_gridCells;
 static MarkerParticle* dev_markerParticles;
@@ -50,9 +53,6 @@ static int* csrRowPtrA;
 static int* csrColIndA;
 static float* vecB;
 static float* vecX;
-
-static int BLOCKS_PARTICLES = (NUM_MARKER_PARTICLES + blockSize - 1) / blockSize;
-static int BLOCKS_CELLS = (NUM_CELLS + blockSize - 1) / blockSize;
 
 void initSim();
 void iterateSim();

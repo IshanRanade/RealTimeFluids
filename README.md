@@ -1,3 +1,15 @@
+Real Time Eulerian Fluids
+=========================
+
+* Salaar Kohari and Ishan Ranade
+* Tested on: Windows 10, Intel Xeon @ 3.1GHz 32GB, GTX 980 4GB
+
+### Introduction
+
+An open-source repository featuring **real-time Eulerian fluid simulation and rendering** based on SIGGRAPH research, primarily [Real-Time Eulerian Water Simulation Using a Restricted Tall Cell Grid](http://matthias-mueller-fischer.ch/publications/tallCells.pdf).
+
+### Build and Run
+
 To run application:
 
 1) Create a "build" folder in the root directory
@@ -8,29 +20,31 @@ To run application:
 
 4) In the "build" folder you will see a .sln project, open that in Visual Studio
 
+### Simulation Procedure
 
-Initialization Steps
+##### Initialization
 
-1. Setup OpenGL, get pbo working so we can fill it in CUDA
-2. Copy rasterization project as base code
+1. Tune simulation parameters, i.e. time step and grid
+2. Allocate arrays for velocity, pressure, marker particles
+3. Initialize tall cell grid with some scene file
 
-Grid Initialization Steps
+##### Advection
 
-1. Allocate arrays for velocity, pressure, marker particles
-2. Create the height 3d grid, MAC grid, helper accessor methods
-3. Initialize every grid cell with some scene file
+1. Advect velocity of tall cells
+2. Advect pressure of tall cells
+3. Advect attributes of marker particles
+4. Add/remove marker particles based on new tall cells
 
-Advection Steps
+##### Rendering
 
-1. Figure out time step 
-2. Advect pressure of grid cells
-3. Advect velocity of grid cells
-4. Advect attributes of marker particles
-5. Advect level set
-6. Add/remove marker particles based on new level set
+1. Ray trace kernel for each pixel
+2. Check hierarchy for possible water particle collisions
+3. Compute ray-sphere intersections for those particles
+4. Use near/far distance to color collisions
+5. Fill a pbo to render with OpenGL
 
-Render Steps
+### References
 
-1. Write a render kernel
-2. Use raymarching through each pixel
-3. Fill a pbo
+- [Real-Time Eulerian Water Simulation Using a Restricted Tall Cell Grid, Chentanez and Muller](http://matthias-mueller-fischer.ch/publications/tallCells.pdf)
+- [Paper Name](https://www.paperlink.com)
+- [Paper Name](https://www.paperlink.com)
