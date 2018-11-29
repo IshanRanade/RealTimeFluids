@@ -11,7 +11,6 @@ static enum CellType {
 
 static struct GridCell {
 	CellType cellType;
-	glm::vec3 worldPosition;
 	float pressure;
 	float tempPressure;
 	glm::vec3 velocity;
@@ -24,7 +23,6 @@ static struct MarkerParticle {
 };
 
 static struct Grid {
-    GridCell* dev_cells;
     float* dev_nnzA;
     int* dev_colIndA;
     float* dev_X;

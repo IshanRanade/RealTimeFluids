@@ -250,7 +250,6 @@ __global__ void initializeGridCells(int n, GridCell *cells) {
 		glm::vec3 coords = getCellUncompressedCoordinates(index);
 
 		GridCell &cell = cells[index];
-		cell.worldPosition = glm::vec3(coords.x * CELL_WIDTH, coords.y * CELL_WIDTH, coords.z * CELL_WIDTH);
 	}
 }
 
@@ -459,6 +458,16 @@ __global__ void swapCellVelocities(int n, GridCell *cells) {
 
 __global__ void gaussSeidelPressure(Grid grid) {
     const int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (index >= grid.numCells)
+        return;
+
+    const int offset = index * 6;
+    float numerator = 0;
+    for (int j = 0; j < 6; ++j) {
+        numerator -= grid.dev_nnzA[index * 7 + j + 1] * grid.dev_X[grid.dev_colIndA[index * 6 + j]];
+    }
+    grid.dev_X[index] = numerator / grid.dev_nnzA[index * 7];
 }
 
 __global__ void copyPressureToCells(int numCells, float* vecX, GridCell* cells) {
@@ -483,9 +492,12 @@ void initHierarchicalPressureGrids() {
     grids[0].gridY = GRID_Y;
     grids[0].gridZ = GRID_Z;
     grids[0].numCells = NUM_CELLS;
-    grids[0].dev_cells = dev_gridCells;
+
+    // 7 nonzero values per row
     cudaMalloc(&grids[0].dev_nnzA, NUM_CELLS * 7 * sizeof(float));
-    cudaMalloc(&grids[0].dev_colIndA, NUM_CELLS * sizeof(float));
+
+    // 6 column index
+    cudaMalloc(&grids[0].dev_colIndA, NUM_CELLS * 6 * sizeof(int));
     cudaMalloc(&grids[0].dev_X, NUM_CELLS * sizeof(float));
     cudaMalloc(&grids[0].dev_B, NUM_CELLS * sizeof(float));
 
@@ -496,9 +508,8 @@ void initHierarchicalPressureGrids() {
         grids[0].gridY = grids[d - 1].gridY / 2;
         grids[0].gridZ = grids[d - 1].gridZ / 2;
         grids[0].numCells = grids[0].gridX * grids[0].gridY * grids[0].gridZ;
-        cudaMalloc(&grids[d].dev_cells, grids[d].numCells * sizeof(GridCell));
         cudaMalloc(&grids[d].dev_nnzA, grids[d].numCells * 7 * sizeof(float));
-        cudaMalloc(&grids[d].dev_colIndA, grids[d].numCells * sizeof(float));
+        cudaMalloc(&grids[d].dev_colIndA, grids[d].numCells * 6 * sizeof(int));
         cudaMalloc(&grids[d].dev_X, NUM_CELLS * sizeof(float));
         cudaMalloc(&grids[d].dev_B, NUM_CELLS * sizeof(float));
     }
@@ -570,6 +581,11 @@ void iterateSim() {
 	swapCellVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
 	checkCUDAError("swapping velocities in cells failed");
 	cudaDeviceSynchronize();
+
+    // Gauss Seidel Pressure Solver
+    /*gaussSeidelPressure << <BLOCKS_CELLS, BLOCK_SIZE >> > (grids[0]);
+    checkCUDAError("gauss seidel failed");
+    cudaDeviceSynchronize();*/
 
 	// Calculate pressure
 	/*setupPressureCalc << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, csrValA, csrRowPtrA, csrColIndA, vecB, dev_gridCells);
