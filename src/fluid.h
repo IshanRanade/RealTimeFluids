@@ -23,6 +23,20 @@ static struct MarkerParticle {
 	glm::vec3 color;
 };
 
+static struct Grid {
+    GridCell* dev_cells;
+    int level;
+    int gridX, gridY, gridZ, numCells;
+
+    void setGrid(int newLevel, int newX, int newY, int newZ) {
+        level = newLevel;
+        gridX = newX;
+        gridY = newY;
+        gridZ = newZ;
+        numCells = gridX * gridY * gridZ;
+    }
+};
+
 #define RAY_CAST 1
 #define TIME_STEP (1.0f / 30.0f)
 
@@ -46,6 +60,9 @@ static struct MarkerParticle {
 
 static GridCell* dev_gridCells;
 static MarkerParticle* dev_markerParticles;
+
+static Grid* grids;
+static int GRID_LEVELS;
 
 static int nnz;
 static float* csrValA;

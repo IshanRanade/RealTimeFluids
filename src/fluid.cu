@@ -9,6 +9,7 @@
 #include <iostream>
 #include <thrust/random.h>
 #include <glm/gtc/matrix_transform.hpp>
+#include <algorithm>
 
 
 #define ERRORCHECK 1
@@ -39,16 +40,16 @@ __device__ int getCellCompressedIndex(int x, int y, int z) {
 }
 
 __device__ glm::vec3 getCellUncompressedCoordinates(int index) {
-	int z = index / (GRID_X * GRID_Y);
+    const int z = index / (GRID_X * GRID_Y);
 	index -= (z * GRID_X * GRID_Y);
-	int y = index / GRID_X;
-	int x = index % GRID_X;
+    const int y = index / GRID_X;
+    const int x = index % GRID_X;
 
 	return glm::vec3(x, y, z);
 }
 
 __global__ void fillVBOData(int n, void *vbo, MarkerParticle *particles) {
-	int index = blockIdx.x * blockDim.x + threadIdx.x;
+    const int index = blockIdx.x * blockDim.x + threadIdx.x;
 
 	float *vboFloat = (float*)vbo;
 
@@ -114,12 +115,12 @@ __device__ float raySphereIntersect(glm::vec3 rayPos, glm::vec3 rayDir, glm::vec
 }
 
 __device__ float smin(float a, float b, float k) {
-  float h = glm::clamp(0.5f + 0.5f * (b - a) / k, 0.0f, 1.0f);
-  return glm::mix(b, a, h) - k * h * (1.0f - h);
+    const float h = glm::clamp(0.5f + 0.5f * (b - a) / k, 0.0f, 1.0f);
+    return glm::mix(b, a, h) - k * h * (1.0f - h);
 }
 
 __device__ glm::vec4 smin(glm::vec3 vecA, glm::vec3 vecB, float a, float b, float k) {
-    float h = glm::clamp(0.5f + 0.5f * (b - a) / k, 0.0f, 1.0f);
+    const float h = glm::clamp(0.5f + 0.5f * (b - a) / k, 0.0f, 1.0f);
     return glm::vec4(glm::mix(vecA, vecB, h), glm::mix(b, a, h) - k * h * (1.0f - h));
 }
 
@@ -128,21 +129,21 @@ __device__ bool inBounds(float value, float bounds) {
 }
 
 __global__ void raycastPBO(int numParticles, uchar4 *pbo, MarkerParticle *particles, glm::vec3 camPos, Camera camera) {
-	int idx = blockIdx.x * blockDim.x + threadIdx.x;
-	int idy = blockIdx.y * blockDim.y + threadIdx.y;
+    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    const int idy = blockIdx.y * blockDim.y + threadIdx.y;
 
 	if (idx < camera.resolution.x && idy < camera.resolution.y) {
         // Setup variables
         bool intersected = false;
-		glm::vec3 rayPos = camPos;
-		float distance = 1000.0f;
-		glm::vec3 view = camera.view;
-		glm::vec3 up = camera.up;
-		glm::vec3 right = camera.right;
+        glm::vec3 rayPos = camPos;
+        float distance = 1000.0f;
+        const glm::vec3 view = camera.view;
+        const glm::vec3 up = camera.up;
+        const glm::vec3 right = camera.right;
         glm::vec3 normal = glm::vec3(0, 1, 0);
 
-		float yscaled = glm::tan(camera.fov.y * (3.1415927f / 180.0f));
-		float xscaled = (yscaled *  camera.resolution.x) / camera.resolution.y;
+        const float yscaled = glm::tan(camera.fov.y * (3.1415927f / 180.0f));
+        const float xscaled = (yscaled *  camera.resolution.x) / camera.resolution.y;
 		glm::vec2 pixelLength = glm::vec2(2 * xscaled / camera.resolution.x, 2 * yscaled / camera.resolution.y);
 
 		glm::vec3 rayDir = glm::normalize(view
@@ -187,7 +188,7 @@ __global__ void raycastPBO(int numParticles, uchar4 *pbo, MarkerParticle *partic
         intersected = distance < radius;
 #endif
 
-		int index = idx + idy * camera.resolution.x;
+        const int index = idx + idy * camera.resolution.x;
 
 		// Set the color
 		if(intersected) {
@@ -240,7 +241,7 @@ void raycastPBO(uchar4* pbo, glm::vec3 camPos, Camera camera) {
 }
 
 __global__ void initializeGridCells(int n, GridCell *cells) {
-	int index = blockIdx.x * blockDim.x + threadIdx.x;
+    const int index = blockIdx.x * blockDim.x + threadIdx.x;
 
 	if (index < n) {
 		int *x;
@@ -253,17 +254,17 @@ __global__ void initializeGridCells(int n, GridCell *cells) {
 	}
 }
 
-__global__ void setAllGridCellsToAir(int n, GridCell *cells, CellType airType) {
-	int index = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void setAllGridCellsToAir(int n, GridCell *cells) {
+    const int index = blockIdx.x * blockDim.x + threadIdx.x;
 
 	if (index < n) {
 		GridCell &cell = cells[index];
-		cell.cellType = airType;
+		cell.cellType = AIR;
 	}
 }
 
-__global__ void setGridCellsWithMarkerParticleToFluid(int n, GridCell *cells, MarkerParticle *particles, CellType fluidType) {
-	int index = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void setGridCellsWithMarkerParticleToFluid(int n, GridCell *cells, MarkerParticle *particles) {
+    const int index = blockIdx.x * blockDim.x + threadIdx.x;
 
 	if (index < n) {
 		MarkerParticle &particle = particles[index];
@@ -276,14 +277,14 @@ __global__ void setGridCellsWithMarkerParticleToFluid(int n, GridCell *cells, Ma
 }
 
 void fillVBOsWithMarkerParticles(void *vbo) {
-	int blocks = (NUM_MARKER_PARTICLES + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    const int blocks = (NUM_MARKER_PARTICLES + BLOCK_SIZE - 1) / BLOCK_SIZE;
 	fillVBOData<<<blocks, BLOCK_SIZE>>>(NUM_MARKER_PARTICLES, vbo, dev_markerParticles);
 	checkCUDAError("filling VBOs with marker particle data failed");
 	cudaDeviceSynchronize();
 }
 
 __global__ void generateRandomWorldPositionsForParticles(int n, MarkerParticle *particles) {
-	int index = blockIdx.x * blockDim.x + threadIdx.x;
+    const int index = blockIdx.x * blockDim.x + threadIdx.x;
 
 	if (index < n) {
 		// TODO: Fix these random generators
@@ -314,14 +315,14 @@ __global__ void generateRandomWorldPositionsForParticles(int n, MarkerParticle *
 //}
 
 __global__ void backwardsParticleTrace(int n, GridCell *cells) {
-	int index = blockIdx.x * blockDim.x + threadIdx.x;
+    const int index = blockIdx.x * blockDim.x + threadIdx.x;
 
 	if (index < n) {
 		GridCell &cell = cells[index];
 
 		// For now just use simple Euler
-		glm::vec3 cellPosition = cell.worldPosition + glm::vec3(CELL_WIDTH / 2.0, CELL_WIDTH / 2.0, CELL_WIDTH / 2.0);
-		glm::vec3 oldPosition = cellPosition - TIME_STEP * cell.velocity;
+		const glm::vec3 cellPosition = (getCellUncompressedCoordinates(index) * CELL_WIDTH) + glm::vec3(CELL_WIDTH / 2.0, CELL_WIDTH / 2.0, CELL_WIDTH / 2.0);
+        const glm::vec3 oldPosition = cellPosition - TIME_STEP * cell.velocity;
 
 		int prevCellIndex = getCellCompressedIndex((int)oldPosition.x, (int)oldPosition.y, (int)oldPosition.z);
 		if (prevCellIndex < 0 || prevCellIndex >= GRID_X * GRID_Y * GRID_Z) {
@@ -334,7 +335,7 @@ __global__ void backwardsParticleTrace(int n, GridCell *cells) {
 }
 
 __global__ void applyExternalForcesToGridCells(int n, GridCell *cells) {
-	int index = blockIdx.x * blockDim.x + threadIdx.x;
+    const int index = blockIdx.x * blockDim.x + threadIdx.x;
 
 	if (index < n) {
 		GridCell &cell = cells[index];
@@ -344,7 +345,7 @@ __global__ void applyExternalForcesToGridCells(int n, GridCell *cells) {
 	}
 }
 __global__ void moveMarkerParticlesThroughField(int n, GridCell *cells, MarkerParticle *particles) {
-	int index = blockIdx.x * blockDim.x + threadIdx.x;
+    const int index = blockIdx.x * blockDim.x + threadIdx.x;
 
 	if (index < n) {
 		MarkerParticle &particle = particles[index];
@@ -361,7 +362,7 @@ __global__ void moveMarkerParticlesThroughField(int n, GridCell *cells, MarkerPa
 }
 
 __global__ void applyViscosity(int n, GridCell *cells) {
-	int index = blockIdx.x * blockDim.x + threadIdx.x;
+    const int index = blockIdx.x * blockDim.x + threadIdx.x;
 
 	if (index < n) {
 		GridCell &cell = cells[index];
@@ -398,7 +399,7 @@ __global__ void applyViscosity(int n, GridCell *cells) {
 }
 
 __global__ void swapCellVelocities(int n, GridCell *cells) {
-	int index = blockIdx.x * blockDim.x + threadIdx.x;
+    const int index = blockIdx.x * blockDim.x + threadIdx.x;
 
 	if (index < n) {
 		GridCell &cell = cells[index];
@@ -407,7 +408,7 @@ __global__ void swapCellVelocities(int n, GridCell *cells) {
 }
 
 __global__ void setupPressureCalc(int numCells, float* csrValA, int* csrRowPtrA, int* csrColIndA, float* vecB, GridCell* cells) {
-	int index = blockIdx.x * blockDim.x + threadIdx.x;
+    const int index = blockIdx.x * blockDim.x + threadIdx.x;
 
 	if (index > 10 && index < 12) {
 		glm::vec3 gridPos = getCellUncompressedCoordinates(index);
@@ -457,21 +458,38 @@ __global__ void setupPressureCalc(int numCells, float* csrValA, int* csrRowPtrA,
 }
 
 __global__ void copyPressureToCells(int numCells, float* vecX, GridCell* cells) {
-	int index = blockIdx.x * blockDim.x + threadIdx.x;
+    const int index = blockIdx.x * blockDim.x + threadIdx.x;
 	if (index < numCells) {
-		printf("%d: %f\n", index, vecX[index]);
+		//printf("%d: %f\n", index, vecX[index]);
 		cells[index].pressure = vecX[index];
 	}
 }
 
+void initHierarchicalPressureGrids() {
+    // Calculate number of grid levels`
+    GRID_LEVELS = std::floor(log2(std::min(std::min(GRID_X, GRID_Y), GRID_Z)));
+
+    // Allocate space for primary grid cells
+    cudaMalloc(&dev_gridCells, NUM_CELLS * sizeof(GridCell));
+
+    // Create grid array and primary grid
+    grids = new Grid[GRID_LEVELS];
+    grids[0].setGrid(0, GRID_X, GRID_Y, GRID_Z);
+    grids[0].dev_cells = dev_gridCells;
+
+    for(int d = 1; d < GRID_LEVELS; ++d) {
+        // Create and allocate space for sub grid cells
+        grids[d].setGrid(d, grids[d - 1].gridX / 2, grids[d - 1].gridY / 2, grids[d - 1].gridZ / 2);
+        cudaMalloc(&grids[d].dev_cells, grids[d].numCells * sizeof(GridCell));
+    }
+}
+
 void initSim() {
-	// Allocate space for all of the grid cells
-	cudaMalloc(&dev_gridCells, NUM_CELLS * sizeof(GridCell));
-	cudaMemset(dev_gridCells, 0, NUM_CELLS * sizeof(GridCell));
+    // Init hierarchical pressure grids
+    initHierarchicalPressureGrids();
 
 	// Allocate space for all of the marker particles
 	cudaMalloc(&dev_markerParticles, NUM_MARKER_PARTICLES * sizeof(MarkerParticle));
-	cudaMemset(dev_markerParticles, 0, NUM_MARKER_PARTICLES * sizeof(MarkerParticle));
 
 	// Allocate space for sparse linear solver of pressures
 	/*nnz = NUM_CELLS * 27;
@@ -494,12 +512,12 @@ void initSim() {
 
 void iterateSim() {
 	// Make all the cells temporarily air cells
-	setAllGridCellsToAir<<<BLOCKS_CELLS, BLOCK_SIZE>>>(NUM_CELLS, dev_gridCells, AIR);
+	setAllGridCellsToAir<<<BLOCKS_CELLS, BLOCK_SIZE>>>(NUM_CELLS, dev_gridCells);
 	checkCUDAError("marking all cells as air cells failed");
 	cudaDeviceSynchronize();
 
 	// Mark all cells with a marker particle as a fluid cell
-	setGridCellsWithMarkerParticleToFluid<<<BLOCKS_PARTICLES, BLOCK_SIZE>>>(NUM_MARKER_PARTICLES, dev_gridCells, dev_markerParticles, FLUID);
+	setGridCellsWithMarkerParticleToFluid<<<BLOCKS_PARTICLES, BLOCK_SIZE>>>(NUM_MARKER_PARTICLES, dev_gridCells, dev_markerParticles);
 	checkCUDAError("marking all cells with a marker particle as fluid cells failed");
 	cudaDeviceSynchronize();
 
