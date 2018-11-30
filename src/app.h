@@ -39,15 +39,13 @@ struct Camera {
 		resolution.x = width;
 		resolution.y = height;
 
-		position = glm::vec3(180, 150, 180);
+		position = glm::vec3(30, 20, 30);
 		lookAt = glm::vec3(0, 5, 0);
 		up = glm::vec3(0, 1, 0);
 
-		fov.y = 45.0;
-
-		float yscaled = tan(fov.y * (PI / 180));
-		float xscaled = (yscaled * resolution.x) / resolution.y;
-		float fovx = (atan(xscaled) * 180) / PI;
+		//float yscaled = tan(fov.y * (PI / 180));
+		//float xscaled = (yscaled * resolution.x) / resolution.y;
+		//float fovx = (atan(xscaled) * 180) / PI;
 		fov.y = 45.0;
 
 		view = glm::normalize(lookAt - position);
