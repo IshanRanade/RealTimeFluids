@@ -48,7 +48,8 @@ static struct Grid {
 #define NUM_MARKER_PARTICLES 2000
 #define PARTICLE_RADIUS 3.0f
 
-#define DENSITY 1.0f
+#define FLUID_DENSITY 100.0f
+#define AIR_DENSITY 1.0f
 #define VISCOSITY 1.0f
 
 #define BLOCK_SIZE 256

@@ -441,7 +441,9 @@ __global__ void setupPressureCalc(Grid grid, GridCell* cells) {
         if (cell.cellType != adjacent.cellType)
             divU += adjacent.velocity.x - cell.velocity.x;
 	}
-    grid.dev_B[index] = (WIDTH_DIV_TIME) * divU - airCells;
+
+	
+    grid.dev_B[index] = (WIDTH_DIV_TIME) * divU * (cell.cellType == FLUID ? FLUID_DENSITY : AIR_DENSITY) - airCells;
 }
 
 __global__ void gaussSeidelPressure(Grid grid) {
@@ -489,7 +491,14 @@ __global__ void applyPressure(int numCells, GridCell* cells) {
             deltaPressure[2] = cells[index].pressure - cells[nextPos].pressure;
         }
 
-        cells[index].tempVelocity = cells[index].velocity - deltaPressure * TIME_STEP / (DENSITY * CELL_WIDTH);
+		float density;
+		if (cells[index].cellType == FLUID) {
+			density = FLUID_DENSITY;
+		}
+		else {
+			density = AIR_DENSITY;
+		}
+        cells[index].tempVelocity = cells[index].velocity - deltaPressure * TIME_STEP / (density * CELL_WIDTH);
     }
 }
 
