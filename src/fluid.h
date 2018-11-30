@@ -23,13 +23,15 @@ static struct MarkerParticle {
 };
 
 static struct Grid {
-    float* dev_nnzA;
+    float* dev_valA;
     int* dev_colIndA;
     float* dev_X;
     float* dev_B;
+    float* dev_terrain;
+    float* dev_tallHeight;
 
     int level;
-    int gridX, gridY, gridZ, numCells;
+    int sizeX, sizeY, sizeZ, numCells;
 };
 
 #define RAY_CAST 1
@@ -59,14 +61,8 @@ static MarkerParticle* dev_markerParticles;
 static Grid* grids;
 static int GRID_LEVELS;
 
-/*static int nnz;
-static float* csrValA;
-static int* csrRowPtrA;
-static int* csrColIndA;
-static float* vecB;
-static float* vecX;*/
-
 void initSim();
+void freeSim();
 void iterateSim();
 void fillVBOsWithMarkerParticles(void *vbo);
 void raycastPBO(uchar4* pbo, glm::vec3 camPos, Camera camera);

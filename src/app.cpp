@@ -157,6 +157,8 @@ void App::start() {
 		draw();
 	}
 
+    freeSim();
+
 	glDeleteVertexArrays(1, &VAO);
 	glDeleteBuffers(1, &VBO);
 	glDeleteBuffers(1, &EBO);
