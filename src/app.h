@@ -39,7 +39,7 @@ struct Camera {
 		resolution.x = width;
 		resolution.y = height;
 
-		position = glm::vec3(30, 20, 30);
+		position = glm::vec3(25, 15, 25);
 		lookAt = glm::vec3(0, 5, 0);
 		up = glm::vec3(0, 1, 0);
 

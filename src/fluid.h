@@ -26,16 +26,18 @@ static struct Grid {
     float* dev_valA;
     int* dev_colIndA;
     float* dev_X;
+    //float* dev_tempX;
     float* dev_B;
     float* dev_terrain;
     float* dev_tallHeight;
+    //float *dev_r;
 
     int level;
     int sizeX, sizeY, sizeZ, numCells;
 };
 
 #define RAY_CAST 1
-#define TIME_STEP (1.0f / 30.0f)
+#define TIME_STEP (1.0f / 50.0f)
 
 #define GRID_X 16
 #define GRID_Y 16
@@ -48,9 +50,10 @@ static struct Grid {
 #define NUM_MARKER_PARTICLES (NUM_CELLS * 2)
 #define PARTICLE_RADIUS 0.02f
 
-#define FLUID_DENSITY 10.0f
-#define AIR_DENSITY 1.0f
+#define FLUID_DENSITY 997.0f
+#define AIR_DENSITY 1.225f
 #define VISCOSITY 1.0f
+#define GAUSS_ITERATIONS 64
 
 #define BLOCK_SIZE 256
 #define BLOCKS_PARTICLES ((NUM_MARKER_PARTICLES + BLOCK_SIZE - 1) / BLOCK_SIZE)
@@ -60,7 +63,12 @@ static GridCell* dev_gridCells;
 static MarkerParticle* dev_markerParticles;
 
 static Grid* grids;
-static int GRID_LEVELS;
+static int MAX_GRID_LEVEL;
+
+static float* vecX;
+static float* vecB;
+static float* valA;
+static int* colIndA;
 
 void initSim();
 void freeSim();
