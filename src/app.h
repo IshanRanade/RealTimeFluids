@@ -34,14 +34,13 @@ struct Camera {
 	glm::ivec3 resolution;
 
 	Camera(int width, int height) {
-		zoom = 1.0f;
-
 		resolution.x = width;
 		resolution.y = height;
 
-		position = glm::vec3(25, 15, 25);
+		position = glm::vec3(25, -6, 25);
 		lookAt = glm::vec3(0, 5, 0);
 		up = glm::vec3(0, 1, 0);
+        zoom = glm::length(position - lookAt);
 
 		//float yscaled = tan(fov.y * (PI / 180));
 		//float xscaled = (yscaled * resolution.x) / resolution.y;
@@ -50,6 +49,11 @@ struct Camera {
 
 		view = glm::normalize(lookAt - position);
 		right = glm::normalize(glm::cross(view, up));
+
+        const glm::vec3 viewXZ = glm::vec3(view.x, 0.0f, view.z);
+        const glm::vec3 viewZY = glm::vec3(0.0f, view.y, view.z);
+        phi = glm::acos(glm::dot(glm::normalize(viewXZ), glm::vec3(0, 0, -1)));
+        theta = glm::acos(glm::dot(glm::normalize(viewZY), glm::vec3(0, 1, 0)));
 	}
 
 	void update() {

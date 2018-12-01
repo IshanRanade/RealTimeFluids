@@ -259,7 +259,7 @@ __global__ void setGridCellsWithMarkerParticleToFluid(int n, GridCell* cells, Ma
 		
         cells[compressedCellIndex].cellType = FLUID;
 
-        const glm::vec3 cellPos = getCellUncompressedCoordinates(index, GRID_X, GRID_Y);
+        /*const glm::vec3 cellPos = getCellUncompressedCoordinates(index, GRID_X, GRID_Y);
         for (int i = 0; i < 5; ++i) {
             const int x = i == 0 ? -1 : i == 1 ? 1 : 0;
             const int y = i == 2 ? -1 : 0;
@@ -270,7 +270,7 @@ __global__ void setGridCellsWithMarkerParticleToFluid(int n, GridCell* cells, Ma
             if (cellPos.x + x >= 0 && cellPos.x + x < GRID_X && cellPos.y + y >= 0 && cellPos.y + y < GRID_Y && cellPos.z + z >= 0 && cellPos.z + z < GRID_Z) {
                 cells[adjacent].cellType = FLUID;
             }
-        }
+        }*/
 	}
 }
 
@@ -342,24 +342,24 @@ __global__ void moveMarkerParticlesThroughField(int n, GridCell *cells, MarkerPa
 	    GridCell &cell = cells[cellIndex];
 
         // clamp velocity max
-	    //if (glm::length(cell.velocity) > 5.0f)
-            //cell.velocity *= 5.0f / glm::length(cell.velocity);
+	    //if (glm::length(cell.velocity) > 10.0f)
+            //cell.velocity *= 10.0f / glm::length(cell.velocity);
 
 		particle.worldPosition += TIME_STEP * cell.velocity;
         float tempPos = particle.worldPosition.x;
 		particle.worldPosition.x = glm::clamp(particle.worldPosition.x, 0.0f, GRID_X * CELL_WIDTH - 0.01f);
-        if (glm::abs(tempPos - particle.worldPosition.x) > 0.01f)
-            cell.velocity.x = 0.0f;
+        //if (glm::abs(tempPos - particle.worldPosition.x) > 0.01f)
+            //cell.velocity.x = 0.0f;
 
         tempPos = particle.worldPosition.y;
 		particle.worldPosition.y = glm::clamp(particle.worldPosition.y, 0.0f, GRID_Y * CELL_WIDTH - 0.01f);
-        if (glm::abs(tempPos - particle.worldPosition.y) > 0.01f)
-            cell.velocity.y = 0.0f;
+        //if (glm::abs(tempPos - particle.worldPosition.y) > 0.01f)
+            //cell.velocity.y = 0.0f;
 
         tempPos = particle.worldPosition.z;
 		particle.worldPosition.z = glm::clamp(particle.worldPosition.z, 0.0f, GRID_Z * CELL_WIDTH - 0.01f);
-        if (glm::abs(tempPos - particle.worldPosition.z) > 0.01f)
-            cell.velocity.z = 0.0f;
+        //if (glm::abs(tempPos - particle.worldPosition.z) > 0.01f)
+            //cell.velocity.z = 0.0f;
 	}
 }
 
@@ -444,24 +444,52 @@ __global__ void setupPressureCalc(Grid grid, GridCell* cells) {
         grid.dev_valA[index * 7 + i + 1] = 1.0f;
 	}
 	// Set matrix value for current grid cell
-    grid.dev_valA[index * 7] = nonSolid;
+    grid.dev_valA[index * 7] = -6.0f;
 
-	// Set value of b vector for pressure linear solver
+	// Set value of b vector for pressure solver
 	float divU = 0.0f;
     GridCell& cell = cells[index];
-	if (cellPos.x + 1 < grid.sizeX) {
+
+    float divPlus = 0.0f;
+    float divMinus = 0.0f;
+    if (cellPos.x + 1 < grid.sizeX) {
         GridCell& adjacent = cells[index + 1];
-		divU += adjacent.velocity.x - cell.velocity.x;
-	}
-	if (cellPos.y + 1 < grid.sizeY) {
+        divPlus = 0.5 * (cell.velocity.x + adjacent.velocity.x);
+    }
+
+    if (cellPos.x - 1 >= 0) {
+        GridCell& adjacent = cells[index - 1];
+        divMinus = 0.5 * (cell.velocity.x - adjacent.velocity.x);
+    }
+    divU += (divPlus - divMinus);
+
+    divPlus = 0.0f;
+    divMinus = 0.0f;
+    if (cellPos.y + 1 < grid.sizeY) {
         GridCell& adjacent = cells[index + grid.sizeX];
-		divU += adjacent.velocity.y - cell.velocity.y;
-	}
-	if (cellPos.z + 1 < grid.sizeZ) {
+        divPlus = 0.5 * (cell.velocity.y + adjacent.velocity.y);
+    }
+
+    if (cellPos.y - 1 >= 0) {
+        GridCell& adjacent = cells[index - grid.sizeX];
+        divMinus = 0.5 * (cell.velocity.y - adjacent.velocity.y);
+    }
+    divU += (divPlus - divMinus);
+
+    divPlus = 0.0f;
+    divMinus = 0.0f;
+    if (cellPos.z + 1 < grid.sizeZ) {
         GridCell& adjacent = cells[index + grid.sizeX * grid.sizeY];
-        divU += adjacent.velocity.z - cell.velocity.z;
-	}
-	
+        divPlus = 0.5 * (cell.velocity.y + adjacent.velocity.y);
+    }
+
+    if (cellPos.z - 1 >= 0) {
+        GridCell& adjacent = cells[index - grid.sizeX * grid.sizeY];
+        divMinus = 0.5 * (cell.velocity.z - adjacent.velocity.z);
+    }
+    divU += (divPlus - divMinus);
+    divU /= CELL_WIDTH;
+
     grid.dev_B[index] = (WIDTH_DIV_TIME) * divU * (cell.cellType == FLUID ? FLUID_DENSITY : AIR_DENSITY) - airCells;
 }
 
@@ -538,11 +566,11 @@ void V_Cycle(int level) {
 // change vecX to pressure array, take out pressure from cells, delete this kernel
 __global__ void copyPressureToCells(int numCells, float* pressure, GridCell* cells) {
     const int index = blockIdx.x * blockDim.x + threadIdx.x;
-	if (index < numCells) {
-        //if (cells[index].cellType == FLUID)
-            //printf("%d: %f\n", index, pressure[index]);
-        cells[index].pressure = cells[index].cellType == AIR ? 1.0f : pressure[index];
-	}
+    if (index < numCells) {
+        //if (index < 100)
+            //printf("%d: %f\n", index, cells[index].velocity.y);
+        cells[index].pressure = cells[index].cellType == AIR ? 1.0f : glm::max(pressure[index], 0.0f);
+    }
 }
 
 __global__ void applyPressure(int numCells, GridCell* cells) {
@@ -713,20 +741,18 @@ void iterateSim() {
 	checkCUDAError("applying external forces to cells failed");
 	cudaDeviceSynchronize();
 
-	// Set each cell velocity to be the temp velocity, needed since previous step had to save old velocities during calculations
 	swapCellVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
 	checkCUDAError("swapping velocities in cells failed");
 	cudaDeviceSynchronize();
 
 	// Apply viscosity to velocities
-	applyViscosity<<<BLOCKS_CELLS, BLOCK_SIZE>>>(NUM_CELLS, dev_gridCells);
+	/*applyViscosity<<<BLOCKS_CELLS, BLOCK_SIZE>>>(NUM_CELLS, dev_gridCells);
 	checkCUDAError("applying viscosity failed");
 	cudaDeviceSynchronize();
 
-	// Set each cell velocity to be the temp velocity, needed since previous step had to save old velocities during calculations
 	swapCellVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
 	checkCUDAError("swapping velocities in cells failed");
-	cudaDeviceSynchronize();
+	cudaDeviceSynchronize();*/
 
     // Setup pressure calculation
     setupPressureCalc << <BLOCKS_CELLS, BLOCK_SIZE >> > (grids[0], dev_gridCells);
@@ -753,24 +779,22 @@ void iterateSim() {
     cudaDeviceSynchronize();
 
 	// Apply pressure
-    applyPressure << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
+    /*applyPressure << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
     checkCUDAError("applying pressure to cell velocities failed");
     cudaDeviceSynchronize();
 
-    // Set each cell velocity to be the temp velocity, needed since previous step had to save old velocities during calculations
     swapCellVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
     checkCUDAError("swapping velocities in cells failed");
-    cudaDeviceSynchronize();
+    cudaDeviceSynchronize();*/
 
 	// Extrapolate fluid velocities into surrounding cells
-    extrapolateFluidVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
+    /*extrapolateFluidVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
     checkCUDAError("extrapolating velocities failed");
     cudaDeviceSynchronize();
 
-    // Set each cell velocity to be the temp velocity, needed since previous step had to save old velocities during calculations
     swapCellVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
     checkCUDAError("swapping velocities in cells failed");
-    cudaDeviceSynchronize();
+    cudaDeviceSynchronize();*/
 
 	// Set the velocities of surrounding cells
 

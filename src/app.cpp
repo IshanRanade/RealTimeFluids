@@ -136,7 +136,7 @@ void App::initGL() {
 void App::start() {
 	while (!glfwWindowShouldClose(window)) {
 		if (camchanged) {
-			//camera->update();
+			camera->update();
 			camchanged = false;
 		}
 
