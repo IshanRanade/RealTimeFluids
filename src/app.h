@@ -15,7 +15,6 @@
 #include <cuda_runtime.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include <math.h>
 
 
 const float PI = 3.14159265358979f;
@@ -38,7 +37,7 @@ struct Camera {
 		resolution.y = height;
 
 		position = glm::vec3(25, -6, 25);
-		lookAt = glm::vec3(0, 5, 0);
+		lookAt = glm::vec3(8, 8, 8);
 		up = glm::vec3(0, 1, 0);
         zoom = glm::length(position - lookAt);
 
