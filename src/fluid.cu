@@ -299,7 +299,7 @@ __global__ void generateRandomWorldPositionsForParticles(int n, MarkerParticle *
 
 		MarkerParticle &particle = particles[index];
 		particle.worldPosition.x = 0.1 * u01(rngX) * GRID_X * CELL_WIDTH;
-		particle.worldPosition.y = 0.8 * u01(rngX) * GRID_Y * CELL_WIDTH;
+		particle.worldPosition.y = 0.5 * u01(rngX) * GRID_Y * CELL_WIDTH + 0.4 * GRID_Y * CELL_WIDTH;
 		particle.worldPosition.z = 1.0 * u01(rngX) * GRID_Z * CELL_WIDTH;
 
 		particle.color = glm::vec3(0.2, 0.2, 1);
@@ -693,8 +693,11 @@ __global__ void extrapolateFluidVelocities(int numCells, GridCell* cells)
                 }
             }
 
-            cell.tempVelocity = averageVelocity / float(count);
-        }
+            cell.tempVelocity = averageVelocity / float(count) / 2.0f;
+		}
+		else {
+			cell.tempVelocity = cell.velocity;
+		}
     }
 }
 
@@ -855,13 +858,13 @@ void iterateSim() {
     cudaDeviceSynchronize();
 
     // Extrapolate fluid velocities into surrounding cells
-    //extrapolateFluidVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
-    //checkCUDAError("extrapolating velocities failed");
-    //cudaDeviceSynchronize();
+    extrapolateFluidVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
+    checkCUDAError("extrapolating velocities failed");
+    cudaDeviceSynchronize();
 
-    //swapCellVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
-    //checkCUDAError("swapping velocities in cells failed");
-    //cudaDeviceSynchronize();
+    swapCellVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
+    checkCUDAError("swapping velocities in cells failed");
+    cudaDeviceSynchronize();
 
 	//setVelocitiesIntoSolidsAsZero << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
 	//checkCUDAError("setting velocities into solids as zero failed");

@@ -36,11 +36,11 @@ static struct Grid {
 };
 
 #define RAY_CAST 1
-#define TIME_STEP (1.0f / 100.0f)
+#define TIME_STEP (1.0f / 30.0f)
 
-#define GRID_X 16
-#define GRID_Y 16
-#define GRID_Z 16
+#define GRID_X 32
+#define GRID_Y 32
+#define GRID_Z 32
 
 #define NUM_CELLS (GRID_X * GRID_Y * GRID_Z)
 #define CELL_WIDTH 1.0f
@@ -54,7 +54,7 @@ static struct Grid {
 #define VISCOSITY 0.5f
 #define FLUID_DENSITY 1.0f
 #define AIR_DENSITY 1.0f
-#define GAUSS_ITERATIONS 64
+#define GAUSS_ITERATIONS 32
 
 #define BLOCK_SIZE 256
 #define BLOCKS_PARTICLES ((NUM_MARKER_PARTICLES + BLOCK_SIZE - 1) / BLOCK_SIZE)
