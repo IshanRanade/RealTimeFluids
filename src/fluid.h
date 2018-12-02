@@ -49,7 +49,7 @@ static struct Grid {
 #define NUM_MARKER_PARTICLES (NUM_CELLS * 2)
 #define PARTICLE_RADIUS 0.05f
 
-#define MAX_VELOCITY 20.0
+#define MAX_VELOCITY 10.0f
 #define GRAVITY 100.0f
 #define VISCOSITY 0.5f
 #define FLUID_DENSITY 1.0f
