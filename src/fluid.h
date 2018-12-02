@@ -37,6 +37,7 @@ static struct Grid {
 };
 
 #define RAY_CAST 1
+#define SPHERE_MARCH 0
 #define TIME_STEP (1.0f / 30.0f)
 
 #define GRID_X 32
@@ -47,7 +48,7 @@ static struct Grid {
 #define CELL_WIDTH 1.0f
 #define WIDTH_DIV_TIME (CELL_WIDTH / TIME_STEP)
 
-#define NUM_MARKER_PARTICLES (NUM_CELLS / 2)
+#define NUM_MARKER_PARTICLES NUM_CELLS
 #define PARTICLE_RADIUS 0.05f
 
 #define MAX_VELOCITY 20.0
@@ -63,6 +64,7 @@ static struct Grid {
 
 static GridCell* dev_gridCells;
 static MarkerParticle* dev_markerParticles;
+static MarkerParticle* markerParticles;
 
 static Grid* grids;
 static int MAX_GRID_LEVEL;
@@ -76,4 +78,4 @@ void initSim();
 void freeSim();
 void iterateSim();
 void fillVBOsWithMarkerParticles(void *vbo);
-void raycastPBO(uchar4* pbo, glm::vec3 camPos, Camera camera);
+void raycastPBO(uchar4* pbo, Camera camera);

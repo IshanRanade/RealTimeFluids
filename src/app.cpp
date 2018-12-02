@@ -174,7 +174,8 @@ void App::draw() {
 	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	/*void *pbo_dptr = NULL;
+#if RAY_CAST || SPHERE_MARCH
+    void *pbo_dptr = NULL;
 
 	cudaGraphicsResource_t resource = 0;
 	cudaGraphicsGLRegisterBuffer(&resource, PBO, cudaGraphicsRegisterFlagsNone);
@@ -182,7 +183,7 @@ void App::draw() {
 	size_t size;
 	cudaGraphicsResourceGetMappedPointer(&pbo_dptr, &size, resource);
 
-	raycastPBO((uchar4*)pbo_dptr, camera->position, *camera);
+	raycastPBO((uchar4*)pbo_dptr, *camera);
 
 	cudaGraphicsUnmapResources(1, &resource, NULL);
 	cudaGraphicsUnregisterResource(resource);
@@ -196,8 +197,9 @@ void App::draw() {
 		glTexCoord2f(0, 1); glVertex3f(1, -1, 0);
 		glTexCoord2f(1, 1); glVertex3f(-1, -1, 0);
 		glTexCoord2f(1, 0); glVertex3f(-1, 1, 0);
-	glEnd();*/
+	glEnd();
 
+#else
 	//glBindBuffer(GL_PIXEL_UNPACK_BUFFER, PBO);
 
 	glUseProgram(shaderProgram);
@@ -208,6 +210,7 @@ void App::draw() {
 	glBindBuffer(GL_ARRAY_BUFFER, VBO);
 	glBindVertexArray(VAO);
 	glDrawElements(GL_POINTS, NUM_MARKER_PARTICLES, GL_UNSIGNED_INT, 0);
+#endif
 
 	glfwSwapBuffers(window);
 }

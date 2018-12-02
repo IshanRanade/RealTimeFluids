@@ -89,6 +89,8 @@ cuda_add_library(src
 	"src/fluid.cu"
 	"src/shaders/basic.vertex.glsl"
 	"src/shaders/basic.frag.glsl"
+	"src/hierarchy.cpp"
+	"src/hierarchy.h"
     OPTIONS -arch=sm_60
     )
 
