@@ -370,9 +370,9 @@ __global__ void generateRandomWorldPositionsForParticles(int n, MarkerParticle *
 		//particle.worldPosition.y = 0.3 * u01(rngX) * GRID_Y * CELL_WIDTH + 0.4 * GRID_Y * CELL_WIDTH;
 		//particle.worldPosition.z = 0.2 * u01(rngX) * GRID_Z * CELL_WIDTH + 0.4 * GRID_Z * CELL_WIDTH;
 
-		particle.worldPosition.x = 0.1 * u01(rngX) * GRID_X * CELL_WIDTH;
-		particle.worldPosition.y = 0.5 * u01(rngX) * GRID_Y * CELL_WIDTH;// +0.4 * GRID_Y * CELL_WIDTH;
-		particle.worldPosition.z = 1.0 * u01(rngX) * GRID_Z * CELL_WIDTH;
+		particle.worldPosition.x = 0.1 * u01(rngX) * GRID_X * CELL_WIDTH + 0.1f;
+		particle.worldPosition.y = 0.5 * u01(rngX) * GRID_Y * CELL_WIDTH + 0.1f;// +0.4 * GRID_Y * CELL_WIDTH;
+		particle.worldPosition.z = 1.0 * u01(rngX) * GRID_Z * CELL_WIDTH + 0.1f;
 
 		particle.color = glm::vec3(0.2, 0.2, 1);
     }
@@ -422,13 +422,113 @@ __global__ void moveMarkerParticlesThroughField(int n, GridCell *cells, MarkerPa
         // Find the cell that this particle is in
         int cellIndex = getCellCompressedIndex(particle.worldPosition.x, particle.worldPosition.y, particle.worldPosition.z, GRID_X, GRID_Y);
 
-        GridCell &cell = cells[cellIndex];
+		glm::vec3 cellCoords = getCellUncompressedCoordinates(cellIndex, GRID_X, GRID_Y);
+		glm::vec3 cellCenter = cellCoords + glm::vec3(0.5, 0.5, 0.5);
 
-        // clamp velocity max
-        //if (glm::length(cell.velocity) > MAX_VELOCITY)
-			//cell.velocity *= MAX_VELOCITY / glm::length(cell.velocity);
+		//printf("%f, %f\n", particle.worldPosition.x, cellCoords.x);
+		//printf("%f\n", cellCoords.x);
 
-        particle.worldPosition += TIME_STEP * cell.velocity;
+		int cellXPlusIndex;
+		int cellXMinusIndex;
+		float xLerp;
+		if (particle.worldPosition.x >= cellCenter.x) {
+			cellXMinusIndex = cellIndex;
+
+			if (cellCoords.x + 1 < GRID_X) {
+				cellXPlusIndex = getCellCompressedIndex(cellCoords.x + 1, cellCoords.y, cellCoords.z, GRID_X, GRID_Y);
+				xLerp = particle.worldPosition.x - cellCenter.x;
+			}
+			else {
+				cellXPlusIndex = cellIndex;
+				xLerp = 1.0f;
+			}
+		}
+		else {
+			cellXPlusIndex = cellIndex;
+
+			if (cellCoords.x - 1 >= 0) {
+				cellXMinusIndex = getCellCompressedIndex(cellCoords.x - 1, cellCoords.y, cellCoords.z, GRID_X, GRID_Y);
+				xLerp = particle.worldPosition.x - (cellCenter.x - 1);
+			}
+			else {
+				cellXMinusIndex = cellIndex;
+				xLerp = 1.0f;
+			}
+		}
+
+		//printf("%f\n", xLerp);
+
+		//printf("%f, %f\n", particle.worldPosition.x, cellCenter.x);
+		//printf("%f\n", xLerp);
+
+		int cellYPlusIndex;
+		int cellYMinusIndex;
+		float yLerp;
+		if (particle.worldPosition.y >= cellCenter.y) {
+			cellYMinusIndex = cellIndex;
+
+			if (cellCoords.y + 1 < GRID_Y) {
+				cellYPlusIndex = getCellCompressedIndex(cellCoords.x, cellCoords.y + 1, cellCoords.z, GRID_X, GRID_Y);
+				yLerp = particle.worldPosition.y - cellCenter.y;
+			}
+			else {
+				cellYPlusIndex = cellIndex;
+				yLerp = 1.0f;
+			}
+		}
+		else {
+			cellYPlusIndex = cellIndex;
+
+			if (cellCoords.y - 1 >= 0) {
+				cellYMinusIndex = getCellCompressedIndex(cellCoords.x, cellCoords.y - 1, cellCoords.z, GRID_X, GRID_Y);
+				yLerp = particle.worldPosition.y - (cellCenter.y - 1);
+			}
+			else {
+				cellYMinusIndex = cellIndex;
+				yLerp = 1.0f;
+			}
+		}
+
+		//printf("%f\n", zLerp);
+
+
+		int cellZPlusIndex;
+		int cellZMinusIndex;
+		float zLerp;
+		if (particle.worldPosition.z >= cellCenter.z) {
+			cellZMinusIndex = cellIndex;
+
+			if (cellCoords.z + 1 < GRID_Z) {
+				cellZPlusIndex = getCellCompressedIndex(cellCoords.x, cellCoords.y, cellCoords.z + 1, GRID_X, GRID_Y);
+				zLerp = particle.worldPosition.z - cellCenter.z;
+			}
+			else {
+				cellZPlusIndex = cellIndex;
+				zLerp = 1.0f;
+			}
+		}
+		else {
+			cellZPlusIndex = cellIndex;
+
+			if (cellCoords.z - 1 >= 0) {
+				cellZMinusIndex = getCellCompressedIndex(cellCoords.x, cellCoords.y, cellCoords.z - 1, GRID_X, GRID_Y);
+				zLerp = particle.worldPosition.z - (cellCenter.z - 1);
+			}
+			else {
+				cellZMinusIndex = cellIndex;
+				zLerp = 1.0f;
+			}
+		}
+		
+		//printf("%f\n", zLerp);
+
+
+		glm::vec3 interpolatedVelocity;
+		interpolatedVelocity.x = cells[cellXMinusIndex].velocity.x * (1.0f - xLerp) + cells[cellXPlusIndex].velocity.x * xLerp;
+		interpolatedVelocity.y = cells[cellXMinusIndex].velocity.y * (1.0f - yLerp) + cells[cellYPlusIndex].velocity.y * yLerp;
+		interpolatedVelocity.z = cells[cellXMinusIndex].velocity.z * (1.0f - zLerp) + cells[cellZPlusIndex].velocity.z * zLerp;
+
+        particle.worldPosition += TIME_STEP * interpolatedVelocity;
         float tempPos = particle.worldPosition.x;
         particle.worldPosition.x = glm::clamp(particle.worldPosition.x, 0.01f, GRID_X * CELL_WIDTH - 0.01f);
 
