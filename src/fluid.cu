@@ -525,8 +525,8 @@ __global__ void moveMarkerParticlesThroughField(int n, GridCell *cells, MarkerPa
 
 		glm::vec3 interpolatedVelocity;
 		interpolatedVelocity.x = cells[cellXMinusIndex].velocity.x * (1.0f - xLerp) + cells[cellXPlusIndex].velocity.x * xLerp;
-		interpolatedVelocity.y = cells[cellXMinusIndex].velocity.y * (1.0f - yLerp) + cells[cellYPlusIndex].velocity.y * yLerp;
-		interpolatedVelocity.z = cells[cellXMinusIndex].velocity.z * (1.0f - zLerp) + cells[cellZPlusIndex].velocity.z * zLerp;
+		interpolatedVelocity.y = cells[cellYMinusIndex].velocity.y * (1.0f - yLerp) + cells[cellYPlusIndex].velocity.y * yLerp;
+		interpolatedVelocity.z = cells[cellZMinusIndex].velocity.z * (1.0f - zLerp) + cells[cellZPlusIndex].velocity.z * zLerp;
 
         particle.worldPosition += TIME_STEP * interpolatedVelocity;
         float tempPos = particle.worldPosition.x;
