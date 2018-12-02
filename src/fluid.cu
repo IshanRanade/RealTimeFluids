@@ -366,8 +366,12 @@ __global__ void generateRandomWorldPositionsForParticles(int n, MarkerParticle *
 		thrust::uniform_real_distribution<float> u01(0, 1);
 
 		MarkerParticle &particle = particles[index];
+		//particle.worldPosition.x = 0.2 * u01(rngX) * GRID_X * CELL_WIDTH + 0.4 * GRID_X * CELL_WIDTH;
+		//particle.worldPosition.y = 0.3 * u01(rngX) * GRID_Y * CELL_WIDTH + 0.4 * GRID_Y * CELL_WIDTH;
+		//particle.worldPosition.z = 0.2 * u01(rngX) * GRID_Z * CELL_WIDTH + 0.4 * GRID_Z * CELL_WIDTH;
+
 		particle.worldPosition.x = 0.1 * u01(rngX) * GRID_X * CELL_WIDTH;
-		particle.worldPosition.y = 0.5 * u01(rngX) * GRID_Y * CELL_WIDTH + 0.4 * GRID_Y * CELL_WIDTH;
+		particle.worldPosition.y = 0.5 * u01(rngX) * GRID_Y * CELL_WIDTH;// +0.4 * GRID_Y * CELL_WIDTH;
 		particle.worldPosition.z = 1.0 * u01(rngX) * GRID_Z * CELL_WIDTH;
 
 		particle.color = glm::vec3(0.2, 0.2, 1);
@@ -730,7 +734,7 @@ __global__ void setVelocitiesIntoSolidsAsZero(int numCells, GridCell* cells) {
 	}
 }
 
-__global__ void extrapolateFluidVelocities(int numCells, GridCell* cells)
+__global__ void extrapolateFluidVelocities(int numCells, GridCell* cells, int size)
 {
     const int index = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -743,11 +747,11 @@ __global__ void extrapolateFluidVelocities(int numCells, GridCell* cells)
 
             glm::vec3 averageVelocity = glm::vec3(0.0);
             int count = 0;
-            for (int x = -1; x <= 1; x++)
+            for (int x = -size; x <= size; x++)
             {
-                for (int y = -1; y <= 1; y++)
+                for (int y = size; y <= size; y++)
                 {
-                    for (int z = -1; z <= 1; z++)
+                    for (int z = -size; z <= size; z++)
                     {
                         if (pos.x + x >= 0 && pos.x < GRID_X &&
                             pos.y + y >= 0 && pos.y < GRID_Y &&
@@ -935,14 +939,15 @@ void iterateSim() {
     checkCUDAError("swapping velocities in cells failed");
     cudaDeviceSynchronize();
 
-    // Extrapolate fluid velocities into surrounding cells
-    extrapolateFluidVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
-    checkCUDAError("extrapolating velocities failed");
-    cudaDeviceSynchronize();
+	// Extrapolate fluid velocities into surrounding cells
+	extrapolateFluidVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells, 5);
+	checkCUDAError("extrapolating velocities failed");
+	cudaDeviceSynchronize();
 
-    swapCellVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
-    checkCUDAError("swapping velocities in cells failed");
-    cudaDeviceSynchronize();
+	swapCellVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
+	checkCUDAError("swapping velocities in cells failed");
+	cudaDeviceSynchronize();
+	
 
 	//setVelocitiesIntoSolidsAsZero << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
 	//checkCUDAError("setting velocities into solids as zero failed");
