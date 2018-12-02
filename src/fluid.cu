@@ -298,8 +298,8 @@ __global__ void generateRandomWorldPositionsForParticles(int n, MarkerParticle *
 		thrust::uniform_real_distribution<float> u01(0, 1);
 
 		MarkerParticle &particle = particles[index];
-		particle.worldPosition.x = 1.0 * u01(rngX) * GRID_X * CELL_WIDTH;
-		particle.worldPosition.y = 0.5 * u01(rngX) * GRID_Y * CELL_WIDTH;
+		particle.worldPosition.x = 0.1 * u01(rngX) * GRID_X * CELL_WIDTH;
+		particle.worldPosition.y = 0.8 * u01(rngX) * GRID_Y * CELL_WIDTH;
 		particle.worldPosition.z = 1.0 * u01(rngX) * GRID_Z * CELL_WIDTH;
 
 		particle.color = glm::vec3(0.2, 0.2, 1);
@@ -560,7 +560,7 @@ __global__ void copyPressureToCells(int numCells, float* pressure, GridCell* cel
     if (index < numCells) {
         //if (index < 100)
             //printf("%d: %f\n", index, cells[index].velocity.y);
-        cells[index].pressure = cells[index].cellType == AIR ? 1.0f : pressure[index];
+		cells[index].pressure = cells[index].cellType == AIR ? 1.0f : pressure[index];
     }
 }
 

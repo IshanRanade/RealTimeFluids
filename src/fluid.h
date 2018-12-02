@@ -46,7 +46,7 @@ static struct Grid {
 #define CELL_WIDTH 1.0f
 #define WIDTH_DIV_TIME (CELL_WIDTH / TIME_STEP)
 
-#define NUM_MARKER_PARTICLES (NUM_CELLS * 2)
+#define NUM_MARKER_PARTICLES (NUM_CELLS * 4)
 #define PARTICLE_RADIUS 0.05f
 
 #define MAX_VELOCITY 10.0f
