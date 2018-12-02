@@ -303,15 +303,14 @@ __global__ void backwardsParticleTrace(int n, GridCell* cells) {
 
         // For now just use simple Euler
         const glm::vec3 cellPosition = (getCellUncompressedCoordinates(index, GRID_X, GRID_Y) * CELL_WIDTH) + glm::vec3(CELL_WIDTH / 2.0, CELL_WIDTH / 2.0, CELL_WIDTH / 2.0);
-        const glm::vec3 oldPosition = cellPosition + TIME_STEP * cell.velocity;
+        const glm::vec3 oldPosition = cellPosition - TIME_STEP * cell.velocity;
+
+		if (oldPosition.x < 0 || oldPosition.x >= GRID_X || oldPosition.y < 0 || oldPosition.y >= GRID_Y || oldPosition.z < 0 || oldPosition.z >= GRID_Z) {
+			return;
+		}
 
         const int prevCellIndex = getCellCompressedIndex(oldPosition.x, oldPosition.y, oldPosition.z, GRID_X, GRID_Y);
-        if (prevCellIndex < 0 || prevCellIndex >= NUM_CELLS)
-            return;
-
-        GridCell &otherCell = cells[prevCellIndex];
-        cell.tempVelocity = cell.velocity + TIME_STEP * otherCell.velocity;
-
+        cell.tempVelocity = cells[prevCellIndex].velocity;
     }
 }
 
@@ -337,8 +336,8 @@ __global__ void moveMarkerParticlesThroughField(int n, GridCell *cells, MarkerPa
         GridCell &cell = cells[cellIndex];
 
         // clamp velocity max
-        if (glm::length(cell.velocity) > 10.0f)
-            cell.velocity *= 10.0f / glm::length(cell.velocity);
+        //if (glm::length(cell.velocity) > MAX_VELOCITY)
+			//cell.velocity *= MAX_VELOCITY / glm::length(cell.velocity);
 
         particle.worldPosition += TIME_STEP * cell.velocity;
         float tempPos = particle.worldPosition.x;
@@ -530,7 +529,7 @@ __global__ void applyPressure(int numCells, GridCell* cells) {
         if (cellPos.x + 1 < GRID_X) {
             GridCell& adjacent = cells[index + 1];
             deltaPressure.x += adjacent.pressure;
-        }// else { cell.tempVelocity = glm::vec3(0); return; }
+        }
         if (cellPos.x - 1 >= 0) {
             GridCell& adjacent = cells[index - 1];
             deltaPressure.x -= adjacent.pressure;
@@ -552,6 +551,9 @@ __global__ void applyPressure(int numCells, GridCell* cells) {
             deltaPressure.z -= adjacent.pressure;
         }
 
+		/*if (glm::length(deltaPressure) > 10.0) {
+			deltaPressure = glm::normalize(deltaPressure) * 10.0f;
+		}*/
         cell.tempVelocity = cell.velocity - deltaPressure * TIME_STEP / ((cell.cellType == FLUID ? FLUID_DENSITY : AIR_DENSITY) * CELL_WIDTH);
     }
 }
@@ -681,14 +683,14 @@ void iterateSim() {
     cudaDeviceSynchronize();
 
     // Apply convection to velocities using a backwards particle trace
-    /*backwardsParticleTrace<<<BLOCKS_CELLS, BLOCK_SIZE>>>(NUM_CELLS, dev_gridCells);
+    backwardsParticleTrace<<<BLOCKS_CELLS, BLOCK_SIZE>>>(NUM_CELLS, dev_gridCells);
     checkCUDAError("convecting velocities using a backwards particle trace failed");
     cudaDeviceSynchronize();
 
     // Set each cell velocity to be the temp velocity, needed since previous step had to save old velocities during calculations
     swapCellVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
     checkCUDAError("swapping velocities in cells failed");
-    cudaDeviceSynchronize();*/
+    cudaDeviceSynchronize();
 
     // Apply external forces to grid cell velocities
     applyExternalForcesToGridCells << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
@@ -700,13 +702,13 @@ void iterateSim() {
     cudaDeviceSynchronize();
 
     // Apply viscosity to velocities
-    /*applyViscosity<<<BLOCKS_CELLS, BLOCK_SIZE>>>(NUM_CELLS, dev_gridCells);
+    applyViscosity<<<BLOCKS_CELLS, BLOCK_SIZE>>>(NUM_CELLS, dev_gridCells);
     checkCUDAError("applying viscosity failed");
     cudaDeviceSynchronize();
 
     swapCellVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
     checkCUDAError("swapping velocities in cells failed");
-    cudaDeviceSynchronize();*/
+    cudaDeviceSynchronize();
 
     // Setup pressure calculation
     setupPressureCalc << <BLOCKS_CELLS, BLOCK_SIZE >> > (grids[0], dev_gridCells);
@@ -742,13 +744,13 @@ void iterateSim() {
     cudaDeviceSynchronize();
 
     // Extrapolate fluid velocities into surrounding cells
-    /*extrapolateFluidVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
-    checkCUDAError("extrapolating velocities failed");
-    cudaDeviceSynchronize();
+    //extrapolateFluidVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
+    //checkCUDAError("extrapolating velocities failed");
+    //cudaDeviceSynchronize();
 
-    swapCellVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
-    checkCUDAError("swapping velocities in cells failed");
-    cudaDeviceSynchronize();*/
+    //swapCellVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
+    //checkCUDAError("swapping velocities in cells failed");
+    //cudaDeviceSynchronize();
 
     // Set the velocities of surrounding cells
 
