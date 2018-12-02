@@ -327,7 +327,7 @@ __global__ void setGridCellsWithMarkerParticleToFluid(int n, GridCell* cells, Ma
 
         cells[compressedCellIndex].cellType = FLUID;
 
-        cells[compressedCellIndex].velocity = glm::vec3(0, -0.1, 0);
+        //cells[compressedCellIndex].velocity = glm::vec3(0, -0.1, 0);
 
         /*const glm::vec3 cellPos = getCellUncompressedCoordinates(index, GRID_X, GRID_Y);
         for (int i = 0; i < 5; ++i) {
@@ -355,11 +355,22 @@ __global__ void generateRandomWorldPositionsForParticles(int n, MarkerParticle *
     const int index = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (index < n) {
-        MarkerParticle &particle = particles[index];
+    /*    MarkerParticle &particle = particles[index];
         particle.worldPosition = getCellUncompressedCoordinates(index / 2, GRID_X, GRID_Y);
         if (index < n / 2)
             particle.worldPosition += glm::vec3(0.5);
-        particle.color = glm::vec3(0.2, 0.2, 1);
+        particle.color = glm::vec3(0.2, 0.2, 1);*/
+		thrust::default_random_engine rngX = thrust::default_random_engine(index | (index << 22));
+		thrust::default_random_engine rngY = thrust::default_random_engine(index | (index << 15) ^ index);
+		thrust::default_random_engine rngZ = thrust::default_random_engine(index ^ (index * 13));
+		thrust::uniform_real_distribution<float> u01(0, 1);
+
+		MarkerParticle &particle = particles[index];
+		particle.worldPosition.x = 0.1 * u01(rngX) * GRID_X * CELL_WIDTH;
+		particle.worldPosition.y = 0.5 * u01(rngX) * GRID_Y * CELL_WIDTH + 0.4 * GRID_Y * CELL_WIDTH;
+		particle.worldPosition.z = 1.0 * u01(rngX) * GRID_Z * CELL_WIDTH;
+
+		particle.color = glm::vec3(0.2, 0.2, 1);
     }
 }
 
@@ -388,8 +399,14 @@ __global__ void applyExternalForcesToGridCells(int n, GridCell *cells) {
     if (index < n) {
         GridCell &cell = cells[index];
 
-        // Apply gravity
-        cell.tempVelocity = cell.velocity + glm::vec3(0, -GRAVITY * TIME_STEP, 0);
+		if (cell.cellType == FLUID) {
+
+			// Apply gravity
+			cell.tempVelocity = cell.velocity + glm::vec3(0, -GRAVITY * TIME_STEP, 0);
+		}
+		else {
+			cell.tempVelocity = cell.velocity;
+		}
     }
 }
 __global__ void moveMarkerParticlesThroughField(int n, GridCell *cells, MarkerParticle *particles) {
@@ -409,13 +426,13 @@ __global__ void moveMarkerParticlesThroughField(int n, GridCell *cells, MarkerPa
 
         particle.worldPosition += TIME_STEP * cell.velocity;
         float tempPos = particle.worldPosition.x;
-        particle.worldPosition.x = glm::clamp(particle.worldPosition.x, 0.0f, GRID_X * CELL_WIDTH - 0.01f);
+        particle.worldPosition.x = glm::clamp(particle.worldPosition.x, 0.01f, GRID_X * CELL_WIDTH - 0.01f);
 
         tempPos = particle.worldPosition.y;
-        particle.worldPosition.y = glm::clamp(particle.worldPosition.y, 0.0f, GRID_Y * CELL_WIDTH - 0.01f);
+        particle.worldPosition.y = glm::clamp(particle.worldPosition.y, 0.01f, GRID_Y * CELL_WIDTH - 0.01f);
 
         tempPos = particle.worldPosition.z;
-        particle.worldPosition.z = glm::clamp(particle.worldPosition.z, 0.0f, GRID_Z * CELL_WIDTH - 0.01f);
+        particle.worldPosition.z = glm::clamp(particle.worldPosition.z, 0.01f, GRID_Z * CELL_WIDTH - 0.01f);
     }
 }
 
@@ -425,28 +442,59 @@ __global__ void applyViscosity(int n, GridCell *cells) {
     if (index < n) {
         GridCell &cell = cells[index];
 
+		if (cell.cellType != FLUID) {
+			return;
+		}
+
         glm::vec3 cellCoords = getCellUncompressedCoordinates(index, GRID_X, GRID_Y);
 
-        int cellTopIndex = getCellCompressedIndex(cellCoords.x, cellCoords.y + 1, cellCoords.z, GRID_X, GRID_Y);
-        int cellBottomIndex = getCellCompressedIndex(cellCoords.x, cellCoords.y - 1, cellCoords.z, GRID_X, GRID_Y);
-        int cellLeftIndex = getCellCompressedIndex(cellCoords.x - 1, cellCoords.y, cellCoords.z, GRID_X, GRID_Y);
-        int cellRightIndex = getCellCompressedIndex(cellCoords.x + 1, cellCoords.y, cellCoords.z, GRID_X, GRID_Y);
-        int cellFrontIndex = getCellCompressedIndex(cellCoords.x, cellCoords.y, cellCoords.z + 1, GRID_X, GRID_Y);
-        int cellBackIndex = getCellCompressedIndex(cellCoords.x, cellCoords.y, cellCoords.z - 1, GRID_X, GRID_Y);
+		float laplacianX = 0.0;
+		float laplacianY = 0.0;
+		float laplacianZ = 0.0;
 
-        float indices[6] = { cellTopIndex, cellBottomIndex, cellLeftIndex, cellRightIndex, cellFrontIndex, cellBackIndex };
+		if (cellCoords.x + 1 < GRID_X) {
+			int adjacent = getCellCompressedIndex(cellCoords.x + 1, cellCoords.y, cellCoords.z, GRID_X, GRID_Y);
+			laplacianX += cells[adjacent].velocity.x;
+			laplacianY += cells[adjacent].velocity.y;
+			laplacianZ += cells[adjacent].velocity.z;
+		}
 
-        float laplacianX = 0.0;
-        float laplacianY = 0.0;
-        float laplacianZ = 0.0;
-        for (int i = 0; i < 6; ++i) {
-            int currCellIndex = indices[i];
-            if (currCellIndex >= 0 && currCellIndex < GRID_X * GRID_Y * GRID_Z) {
-                laplacianX += cells[currCellIndex].velocity.x;
-                laplacianY += cells[currCellIndex].velocity.y;
-                laplacianZ += cells[currCellIndex].velocity.z;
-            }
-        }
+		if (cellCoords.x - 1 >= 0) {
+			int adjacent = getCellCompressedIndex(cellCoords.x - 1, cellCoords.y, cellCoords.z, GRID_X, GRID_Y);
+			laplacianX += cells[adjacent].velocity.x;
+			laplacianY += cells[adjacent].velocity.y;
+			laplacianZ += cells[adjacent].velocity.z;
+		}
+
+
+		if (cellCoords.y + 1 < GRID_Y) {
+			int adjacent = getCellCompressedIndex(cellCoords.x, cellCoords.y + 1, cellCoords.z, GRID_X, GRID_Y);
+			laplacianX += cells[adjacent].velocity.x;
+			laplacianY += cells[adjacent].velocity.y;
+			laplacianZ += cells[adjacent].velocity.z;
+		}
+
+		if (cellCoords.y - 1 >= 0) {
+			int adjacent = getCellCompressedIndex(cellCoords.x, cellCoords.y - 1, cellCoords.z, GRID_X, GRID_Y);
+			laplacianX += cells[adjacent].velocity.x;
+			laplacianY += cells[adjacent].velocity.y;
+			laplacianZ += cells[adjacent].velocity.z;
+		}
+
+
+		if (cellCoords.z + 1 < GRID_Z) {
+			int adjacent = getCellCompressedIndex(cellCoords.x, cellCoords.y, cellCoords.z + 1, GRID_X, GRID_Y);
+			laplacianX += cells[adjacent].velocity.x;
+			laplacianY += cells[adjacent].velocity.y;
+			laplacianZ += cells[adjacent].velocity.z;
+		}
+
+		if (cellCoords.z - 1 >= 0) {
+			int adjacent = getCellCompressedIndex(cellCoords.x, cellCoords.y, cellCoords.z - 1, GRID_X, GRID_Y);
+			laplacianX += cells[adjacent].velocity.x;
+			laplacianY += cells[adjacent].velocity.y;
+			laplacianZ += cells[adjacent].velocity.z;
+		}
 
         laplacianX -= 6 * cell.velocity.x;
         laplacianY -= 6 * cell.velocity.y;
@@ -479,8 +527,7 @@ __global__ void setupPressureCalc(Grid grid, GridCell* cells) {
         const int x = i == 0 ? -1 : i == 1 ? 1 : 0;
         const int y = i == 2 ? -1 : i == 3 ? 1 : 0;
         const int z = i == 4 ? -1 : i == 5 ? 1 : 0;
-        const int adjacent = getCellCompressedIndex(cellPos.x + x, cellPos.y + y, cellPos.z + z, grid.sizeX, grid.sizeY);
-
+   
         // Special case for bounds adjacent
         if (cellPos.x + x < 0 || cellPos.x + x >= grid.sizeX || cellPos.y + y < 0 || cellPos.y + y >= grid.sizeY || cellPos.z + z < 0 || cellPos.z + z >= grid.sizeZ) {
             grid.dev_colIndA[index * 6 + i] = -1;
@@ -488,9 +535,10 @@ __global__ void setupPressureCalc(Grid grid, GridCell* cells) {
             continue;
         }
 
-        GridCell& cell = cells[adjacent];
+		const int adjacent = getCellCompressedIndex(cellPos.x + x, cellPos.y + y, cellPos.z + z, grid.sizeX, grid.sizeY);
+        GridCell& adjacentCell = cells[adjacent];
 
-        if (cell.cellType == AIR)
+        if (adjacentCell.cellType == AIR)
             airCells += 1.0f;
 
         // Set index of adjacent cell
@@ -546,18 +594,21 @@ __global__ void setupPressureCalc(Grid grid, GridCell* cells) {
     grid.dev_B[index] = divU * (cell.cellType == FLUID ? FLUID_DENSITY : AIR_DENSITY) / (TIME_STEP);
 }
 
-__global__ void gaussSeidelPressure(Grid grid) {
-    const int index = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void gaussSeidelPressure(Grid grid, int redBlack) {
+	//const int index = blockIdx.x * blockDim.x + threadIdx.x;
+	//
+ //   if (index >= grid.numCells)
+ //       return;
 
-    if (index >= grid.numCells)
-        return;
-
-    float numerator = grid.dev_B[index];
-    for (int j = 0; j < 6; ++j) {
-        if (grid.dev_colIndA[index * 6 + j] != -1)
-            numerator -= grid.dev_valA[index * 7 + j + 1] * grid.dev_X[grid.dev_colIndA[index * 6 + j]];
-    }
-    grid.dev_X[index] = numerator / grid.dev_valA[index * 7];
+	//if (( (index / NUM_CELLS) + (index % NUM_CELLS)) % 2 == redBlack) {
+	//	
+	//	float numerator = grid.dev_B[index];
+	//	for (int j = 0; j < 6; ++j) {
+	//		if (grid.dev_colIndA[index * 6 + j] != -1)
+	//			numerator -= grid.dev_valA[index * 7 + j + 1] * grid.dev_X[grid.dev_colIndA[index * 6 + j]];
+	//	}
+	//	grid.dev_X[index] = numerator / grid.dev_valA[index * 7];
+	//}
 }
 
 void gaussSeidelPressureCPU(int numCells, float* valA, int* colIndA, float* vecX, float* vecB) {
@@ -577,8 +628,19 @@ __global__ void copyPressureToCells(int numCells, float* pressure, GridCell* cel
     if (index < numCells) {
         //if (index < 100)
             //printf("%d: %f\n", index, cells[index].velocity.y);
-        cells[index].pressure = cells[index].cellType == AIR ? 1.0f : glm::max(pressure[index], 0.0f);
+		cells[index].pressure = cells[index].cellType == AIR ? 1.0f : pressure[index];
     }
+}
+
+__global__ void clampCellVelocities(int numCells, GridCell *cells) {
+	const int index = blockIdx.x * blockDim.x + threadIdx.x;
+	if (index < numCells) {
+		GridCell &cell = cells[index];
+
+		if (glm::length(cell.velocity) > MAX_VELOCITY) {
+			cell.velocity = glm::normalize(cell.velocity) * MAX_VELOCITY;
+		}
+	}
 }
 
 __global__ void applyPressure(int numCells, GridCell* cells) {
@@ -588,6 +650,7 @@ __global__ void applyPressure(int numCells, GridCell* cells) {
         GridCell& cell = cells[index];
         if (cell.cellType != FLUID) {
             cell.pressure = 1.0f;
+			cell.tempVelocity = cell.velocity;
             return;
         }
 
@@ -619,11 +682,52 @@ __global__ void applyPressure(int numCells, GridCell* cells) {
             deltaPressure.z -= adjacent.pressure;
         }
 
+		//if(index < 100)
+		//printf("%d\n", deltaPressure.y);
+
 		/*if (glm::length(deltaPressure) > 10.0) {
 			deltaPressure = glm::normalize(deltaPressure) * 10.0f;
 		}*/
         cell.tempVelocity = cell.velocity - deltaPressure * TIME_STEP / ((cell.cellType == FLUID ? FLUID_DENSITY : AIR_DENSITY) * CELL_WIDTH);
     }
+}
+
+__global__ void setVelocitiesIntoSolidsAsZero(int numCells, GridCell* cells) {
+	const int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+	if (index < numCells)
+	{
+		GridCell &cell = cells[index];
+		glm::vec3 cellPos = getCellUncompressedCoordinates(index, GRID_X, GRID_Y);
+		
+
+		if (cellPos.x == GRID_X - 1 && cell.velocity.x > 0) {
+			cell.velocity.x *= -1.0;
+			cell.velocity.x = 0.0f;
+		}
+		if (cellPos.x == 0 && cell.velocity.x < 0) {
+			cell.velocity.x *= 1.0;
+			cell.velocity.x = 0.0f;
+		}
+
+		if (cellPos.y == GRID_Y - 1 && cell.velocity.y > 0) {
+			cell.velocity.y *= -1.0;
+			cell.velocity.y = 0.0f;
+		}
+		if (cellPos.y == 0 && cell.velocity.y < 0) {
+			cell.velocity.y *= 1.0;
+			cell.velocity.y = 0.0f;
+		}
+
+		if (cellPos.z == GRID_Z - 1 && cell.velocity.z > 0) {
+			cell.velocity.z *= -1.0;
+			cell.velocity.z = 0.0f;
+		}
+		if (cellPos.z == 0 && cell.velocity.z < 0) {
+			cell.velocity.z *= 1.0;
+			cell.velocity.z = 0.0f;
+		}
+	}
 }
 
 __global__ void extrapolateFluidVelocities(int numCells, GridCell* cells)
@@ -657,8 +761,11 @@ __global__ void extrapolateFluidVelocities(int numCells, GridCell* cells)
                 }
             }
 
-            cell.tempVelocity = averageVelocity / float(count);
-        }
+            cell.tempVelocity = averageVelocity / float(count) / 2.0f;
+		}
+		else {
+			cell.tempVelocity = cell.velocity;
+		}
     }
 }
 
@@ -793,6 +900,8 @@ void iterateSim() {
     checkCUDAError("setup pressure calc failed");
     cudaDeviceSynchronize();
 
+	//const int GAUSS_SEIDEL_BLOCKS = (NUM_CELLS * NUM_CELLS + BLOCK_SIZE - 1) / BLOCK_SIZE;
+
     // Gauss Seidel Pressure Solver
     for (int i = 0; i < GAUSS_ITERATIONS; ++i) {
         memset(vecX, 0.0f, NUM_CELLS * sizeof(float));
@@ -802,9 +911,14 @@ void iterateSim() {
         gaussSeidelPressureCPU(NUM_CELLS, valA, colIndA, vecX, vecB);
         cudaMemcpy(grids[0].dev_X, vecX, NUM_CELLS * sizeof(float), cudaMemcpyHostToDevice);
 
-        /*gaussSeidelPressure << <BLOCKS_CELLS, BLOCK_SIZE >> > (grids[0]);
+
+ /*       gaussSeidelPressure << <GAUSS_SEIDEL_BLOCKS, BLOCK_SIZE >> > (grids[0],0);
         checkCUDAError("gauss seidel iteration failed");
         cudaDeviceSynchronize();*/
+
+		//gaussSeidelPressure << <blocksPerGrid2d, BLOCK_SIZE2d >> > (grids[0], 1);
+		//checkCUDAError("gauss seidel iteration failed");
+		//cudaDeviceSynchronize();
     }
 
     // Copy pressure to cells
@@ -822,15 +936,24 @@ void iterateSim() {
     cudaDeviceSynchronize();
 
     // Extrapolate fluid velocities into surrounding cells
-    //extrapolateFluidVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
-    //checkCUDAError("extrapolating velocities failed");
-    //cudaDeviceSynchronize();
+    extrapolateFluidVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
+    checkCUDAError("extrapolating velocities failed");
+    cudaDeviceSynchronize();
 
-    //swapCellVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
-    //checkCUDAError("swapping velocities in cells failed");
-    //cudaDeviceSynchronize();
+    swapCellVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
+    checkCUDAError("swapping velocities in cells failed");
+    cudaDeviceSynchronize();
+
+	//setVelocitiesIntoSolidsAsZero << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
+	//checkCUDAError("setting velocities into solids as zero failed");
+	//cudaDeviceSynchronize();
 
     // Set the velocities of surrounding cells
+
+	// Clamp cell velocities
+	clampCellVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
+	checkCUDAError("clamping cell velocities failed");
+	cudaDeviceSynchronize();
 
     // Move the marker particles through the velocity field
     moveMarkerParticlesThroughField << <BLOCKS_PARTICLES, BLOCK_SIZE >> > (NUM_MARKER_PARTICLES, dev_gridCells, dev_markerParticles);

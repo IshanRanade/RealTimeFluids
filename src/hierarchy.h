@@ -6,7 +6,7 @@
 #include "glm/glm.hpp"
 #include <vector>
 
-#define QUAD_TREE 1
+#define QUAD_TREE 0
 #define MAX_TREE_DEPTH 4
 
 struct MarkerParticle;

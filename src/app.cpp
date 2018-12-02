@@ -6,7 +6,7 @@
 #include "fluid.h"
 
 App::App() {
-	camera = new Camera(width, height);
+	camera = new Camera(width, height, glm::vec3(GRID_X, GRID_Y, GRID_Z));
 	
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
