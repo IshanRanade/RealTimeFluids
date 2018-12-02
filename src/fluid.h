@@ -39,9 +39,9 @@ static struct Grid {
 #define SPHERE_MARCH 0
 #define TIME_STEP (1.0f / 30.0f)
 
-#define GRID_X 16
+#define GRID_X 32
 #define GRID_Y 32
-#define GRID_Z 16
+#define GRID_Z 32
 
 #define NUM_CELLS (GRID_X * GRID_Y * GRID_Z)
 #define CELL_WIDTH 1.0f

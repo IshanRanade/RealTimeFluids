@@ -940,13 +940,13 @@ void iterateSim() {
     cudaDeviceSynchronize();
 
 	// Extrapolate fluid velocities into surrounding cells
-	extrapolateFluidVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells, 5);
+	/*extrapolateFluidVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells, 5);
 	checkCUDAError("extrapolating velocities failed");
 	cudaDeviceSynchronize();
 
 	swapCellVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
 	checkCUDAError("swapping velocities in cells failed");
-	cudaDeviceSynchronize();
+	cudaDeviceSynchronize();*/
 	
 
 	//setVelocitiesIntoSolidsAsZero << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
