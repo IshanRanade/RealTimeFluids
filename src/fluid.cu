@@ -35,8 +35,10 @@ void checkCUDAErrorFn2(const char *msg, const char *file, int line) {
 }
 
 static LinearNode* dev_flatTree;
-static int* dev_particleIds;
-static int* particleIds;
+static float* vecX;
+static float* vecB;
+static float* valA;
+static int* colIndA;
 
 __device__ int getCellCompressedIndex(int x, int y, int z, int gridX, int gridY) {
     return z * gridX * gridY + y * gridX + x;
@@ -267,7 +269,7 @@ __global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* partic
             // Debug cell type color
             //color = cells[getCellCompressedIndex(rayPos.x, rayPos.y, rayPos.z, GRID_X, GRID_Y)].cellType == FLUID ? color : glm::vec3(0);
 
-#if QUAD_TREE
+#if QUAD_TREE && RAY_CAST
             const float depth = glm::min((tMax - tMin) * 0.1f, 1.0f);
             color = depth * color;
 #endif
@@ -305,7 +307,12 @@ __global__ void checkParticlesToRender(int* particleIds, MarkerParticle* particl
         for (int y = -1; y <= 1; ++y) {
             for (int z = -1; z <= 1; ++z) {
                 const int cellId = getCellCompressedIndex(cellPos.x + x, cellPos.y + y, cellPos.z + z, GRID_X, GRID_Y);
-                if (inBounds(glm::vec3(0), glm::vec3(GRID_X, GRID_Y, GRID_Z), cellPos + glm::vec3(x, y, z)) && cells[cellId].cellType == AIR) {
+                if(inBounds(glm::vec3(0), glm::vec3(GRID_X, GRID_Y, GRID_Z), cellPos + glm::vec3(x, y, z))) {
+                    if (cells[cellId].cellType == AIR) {
+                        particleIds[index] = index;
+                        return;
+                    }
+                } else {
                     particleIds[index] = index;
                     return;
                 }
@@ -416,9 +423,9 @@ __global__ void generateRandomWorldPositionsForParticles(int n, MarkerParticle *
 		//particle.worldPosition.y = 0.3 * u01(rngX) * GRID_Y * CELL_WIDTH + 0.4 * GRID_Y * CELL_WIDTH;
 		//particle.worldPosition.z = 0.2 * u01(rngX) * GRID_Z * CELL_WIDTH + 0.4 * GRID_Z * CELL_WIDTH;
 
-		particle.worldPosition.x = 0.1 * u01(rngX) * GRID_X * CELL_WIDTH;
-		particle.worldPosition.y = 0.5 * u01(rngX) * GRID_Y * CELL_WIDTH;// +0.4 * GRID_Y * CELL_WIDTH;
-		particle.worldPosition.z = 1.0 * u01(rngX) * GRID_Z * CELL_WIDTH;
+		particle.worldPosition.x = 0.1 * u01(rngX) * GRID_X * CELL_WIDTH + 0.1f;
+		particle.worldPosition.y = 0.5 * u01(rngX) * GRID_Y * CELL_WIDTH + 0.1f;// +0.4 * GRID_Y * CELL_WIDTH;
+		particle.worldPosition.z = 1.0 * u01(rngX) * GRID_Z * CELL_WIDTH + 0.1f;
     }
 }
 
@@ -466,20 +473,105 @@ __global__ void moveMarkerParticlesThroughField(int n, GridCell *cells, MarkerPa
         // Find the cell that this particle is in
         int cellIndex = getCellCompressedIndex(particle.worldPosition.x, particle.worldPosition.y, particle.worldPosition.z, GRID_X, GRID_Y);
 
-        GridCell &cell = cells[cellIndex];
+		glm::vec3 cellCoords = getCellUncompressedCoordinates(cellIndex, GRID_X, GRID_Y);
+		glm::vec3 cellCenter = cellCoords + glm::vec3(0.5, 0.5, 0.5);
+        
+		int cellXPlusIndex;
+		int cellXMinusIndex;
+		float xLerp;
+		if (particle.worldPosition.x >= cellCenter.x) {
+			cellXMinusIndex = cellIndex;
 
-        // clamp velocity max
-        //if (glm::length(cell.velocity) > MAX_VELOCITY)
-			//cell.velocity *= MAX_VELOCITY / glm::length(cell.velocity);
+			if (cellCoords.x + 1 < GRID_X) {
+				cellXPlusIndex = getCellCompressedIndex(cellCoords.x + 1, cellCoords.y, cellCoords.z, GRID_X, GRID_Y);
+				xLerp = particle.worldPosition.x - cellCenter.x;
+			}
+			else {
+				cellXPlusIndex = cellIndex;
+				xLerp = 1.0f;
+			}
+		}
+		else {
+			cellXPlusIndex = cellIndex;
 
-        particle.worldPosition += TIME_STEP * cell.velocity;
-        float tempPos = particle.worldPosition.x;
+			if (cellCoords.x - 1 >= 0) {
+				cellXMinusIndex = getCellCompressedIndex(cellCoords.x - 1, cellCoords.y, cellCoords.z, GRID_X, GRID_Y);
+				xLerp = particle.worldPosition.x - (cellCenter.x - 1);
+			}
+			else {
+				cellXMinusIndex = cellIndex;
+				xLerp = 1.0f;
+			}
+		}
+
+		int cellYPlusIndex;
+		int cellYMinusIndex;
+		float yLerp;
+		if (particle.worldPosition.y >= cellCenter.y) {
+			cellYMinusIndex = cellIndex;
+
+			if (cellCoords.y + 1 < GRID_Y) {
+				cellYPlusIndex = getCellCompressedIndex(cellCoords.x, cellCoords.y + 1, cellCoords.z, GRID_X, GRID_Y);
+				yLerp = particle.worldPosition.y - cellCenter.y;
+			}
+			else {
+				cellYPlusIndex = cellIndex;
+				yLerp = 1.0f;
+			}
+		}
+		else {
+			cellYPlusIndex = cellIndex;
+
+			if (cellCoords.y - 1 >= 0) {
+				cellYMinusIndex = getCellCompressedIndex(cellCoords.x, cellCoords.y - 1, cellCoords.z, GRID_X, GRID_Y);
+				yLerp = particle.worldPosition.y - (cellCenter.y - 1);
+			}
+			else {
+				cellYMinusIndex = cellIndex;
+				yLerp = 1.0f;
+			}
+		}
+
+
+		int cellZPlusIndex;
+		int cellZMinusIndex;
+		float zLerp;
+		if (particle.worldPosition.z >= cellCenter.z) {
+			cellZMinusIndex = cellIndex;
+
+			if (cellCoords.z + 1 < GRID_Z) {
+				cellZPlusIndex = getCellCompressedIndex(cellCoords.x, cellCoords.y, cellCoords.z + 1, GRID_X, GRID_Y);
+				zLerp = particle.worldPosition.z - cellCenter.z;
+			}
+			else {
+				cellZPlusIndex = cellIndex;
+				zLerp = 1.0f;
+			}
+		}
+		else {
+			cellZPlusIndex = cellIndex;
+
+			if (cellCoords.z - 1 >= 0) {
+				cellZMinusIndex = getCellCompressedIndex(cellCoords.x, cellCoords.y, cellCoords.z - 1, GRID_X, GRID_Y);
+				zLerp = particle.worldPosition.z - (cellCenter.z - 1);
+			}
+			else {
+				cellZMinusIndex = cellIndex;
+				zLerp = 1.0f;
+			}
+		}
+		
+		//printf("%f\n", zLerp);
+
+
+		glm::vec3 interpolatedVelocity;
+		interpolatedVelocity.x = cells[cellXMinusIndex].velocity.x * (1.0f - xLerp) + cells[cellXPlusIndex].velocity.x * xLerp;
+		interpolatedVelocity.y = cells[cellYMinusIndex].velocity.y * (1.0f - yLerp) + cells[cellYPlusIndex].velocity.y * yLerp;
+		interpolatedVelocity.z = cells[cellZMinusIndex].velocity.z * (1.0f - zLerp) + cells[cellZPlusIndex].velocity.z * zLerp;
+
+        particle.worldPosition += TIME_STEP * interpolatedVelocity;
         particle.worldPosition.x = glm::clamp(particle.worldPosition.x, 0.01f, GRID_X * CELL_WIDTH - 0.01f);
-
-        tempPos = particle.worldPosition.y;
         particle.worldPosition.y = glm::clamp(particle.worldPosition.y, 0.01f, GRID_Y * CELL_WIDTH - 0.01f);
-
-        tempPos = particle.worldPosition.z;
         particle.worldPosition.z = glm::clamp(particle.worldPosition.z, 0.01f, GRID_Z * CELL_WIDTH - 0.01f);
     }
 }
@@ -802,8 +894,11 @@ __global__ void extrapolateFluidVelocities(int numCells, GridCell* cells, int si
                             pos.z + z >= 0 && pos.z < GRID_Z)
                         {
                             int surroundingVelocityIndex = getCellCompressedIndex(pos.x + x, pos.y + y, pos.z + z, GRID_X, GRID_Y);
-                            averageVelocity += cells[surroundingVelocityIndex].velocity;
-                            ++count;
+                            
+							if (cells[surroundingVelocityIndex].cellType == FLUID) {
+								averageVelocity += cells[surroundingVelocityIndex].velocity;
+								++count;
+							}
                         }
                     }
                 }
@@ -986,18 +1081,18 @@ void iterateSim() {
     cudaDeviceSynchronize();
 
 	// Extrapolate fluid velocities into surrounding cells
-	/*extrapolateFluidVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells, 5);
-	checkCUDAError("extrapolating velocities failed");
-	cudaDeviceSynchronize();
+	//extrapolateFluidVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells, 1);
+	//checkCUDAError("extrapolating velocities failed");
+	//cudaDeviceSynchronize();
 
-	swapCellVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
-	checkCUDAError("swapping velocities in cells failed");
-	cudaDeviceSynchronize();*/
+	//swapCellVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
+	//checkCUDAError("swapping velocities in cells failed");
+	//cudaDeviceSynchronize();
 	
 
-	//setVelocitiesIntoSolidsAsZero << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
-	//checkCUDAError("setting velocities into solids as zero failed");
-	//cudaDeviceSynchronize();
+	setVelocitiesIntoSolidsAsZero << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
+	checkCUDAError("setting velocities into solids as zero failed");
+	cudaDeviceSynchronize();
 
     // Set the velocities of surrounding cells
 

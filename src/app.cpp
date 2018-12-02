@@ -40,7 +40,7 @@ void App::initGL() {
 	glewInit();
 
 	glEnable(GL_PROGRAM_POINT_SIZE_EXT);
-	glPointSize(5);
+	glPointSize(PARTICLE_RADIUS * 10.0f);
 
 	GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
 	GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
