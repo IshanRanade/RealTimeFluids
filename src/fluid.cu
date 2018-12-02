@@ -858,8 +858,11 @@ __global__ void extrapolateFluidVelocities(int numCells, GridCell* cells, int si
                             pos.z + z >= 0 && pos.z < GRID_Z)
                         {
                             int surroundingVelocityIndex = getCellCompressedIndex(pos.x + x, pos.y + y, pos.z + z, GRID_X, GRID_Y);
-                            averageVelocity += cells[surroundingVelocityIndex].velocity;
-                            ++count;
+                            
+							if (cells[surroundingVelocityIndex].cellType == FLUID) {
+								averageVelocity += cells[surroundingVelocityIndex].velocity;
+								++count;
+							}
                         }
                     }
                 }
@@ -1040,18 +1043,18 @@ void iterateSim() {
     cudaDeviceSynchronize();
 
 	// Extrapolate fluid velocities into surrounding cells
-	/*extrapolateFluidVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells, 5);
-	checkCUDAError("extrapolating velocities failed");
-	cudaDeviceSynchronize();
+	//extrapolateFluidVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells, 1);
+	//checkCUDAError("extrapolating velocities failed");
+	//cudaDeviceSynchronize();
 
-	swapCellVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
-	checkCUDAError("swapping velocities in cells failed");
-	cudaDeviceSynchronize();*/
+	//swapCellVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
+	//checkCUDAError("swapping velocities in cells failed");
+	//cudaDeviceSynchronize();
 	
 
-	//setVelocitiesIntoSolidsAsZero << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
-	//checkCUDAError("setting velocities into solids as zero failed");
-	//cudaDeviceSynchronize();
+	setVelocitiesIntoSolidsAsZero << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
+	checkCUDAError("setting velocities into solids as zero failed");
+	cudaDeviceSynchronize();
 
     // Set the velocities of surrounding cells
 
