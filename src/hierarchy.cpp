@@ -12,36 +12,38 @@ TreeNode* buildTree(std::vector<int>& oldParticles, MarkerParticle* markerPartic
     float yMax = -999999.f;
 
     // Remove particles that are not in bounds
-    std::vector<int> particles;
+    std::vector<int>& particles = node->particles;
     if (currentDepth == 1) {
         particles = oldParticles;
     } else {
         for (int i = 0; i < oldParticles.size(); i++) {
-            const glm::vec3 particleMin = markerParticles[oldParticles[i]].worldPosition - glm::vec3(PARTICLE_RADIUS);
-            const glm::vec3 particleMax = markerParticles[oldParticles[i]].worldPosition + glm::vec3(PARTICLE_RADIUS);
+            //const glm::vec3 particleMin = markerParticles[oldParticles[i]].worldPosition - glm::vec3(PARTICLE_RADIUS);
+            //const glm::vec3 particleMax = markerParticles[oldParticles[i]].worldPosition + glm::vec3(PARTICLE_RADIUS);
+            const glm::vec3 particlePos = markerParticles[oldParticles[i]].worldPosition;
 
-            if (particleMin.x <= bounds.max.x && particleMax.x >= bounds.min.x &&
-                particleMin.z <= bounds.max.z || particleMax.z >= bounds.min.z) {
+            if (particlePos.x <= bounds.max.x && particlePos.x >= bounds.min.x &&
+                particlePos.z <= bounds.max.z && particlePos.z >= bounds.min.z) {
 
                 particles.push_back(oldParticles[i]);
 
-                if (particleMin.y < yMin)
-                    yMin = particleMin.y;
-                else if (particleMax.y > yMax)
-                    yMax = particleMax.y;
+                if (particlePos.y < yMin)
+                    yMin = particlePos.y;
+                else if (particlePos.y > yMax)
+                    yMax = particlePos.y;
             }
         }
     }
 
     if (particles.empty()) {
-        bounds.max = glm::vec3(0);
         bounds.min = glm::vec3(0);
+        bounds.max = glm::vec3(0);
     } else {
         bounds.min.y = yMin;
         bounds.max.y = yMax;
+        bounds.min -= glm::vec3(PARTICLE_RADIUS);
+        bounds.max += glm::vec3(PARTICLE_RADIUS);
     }
     node->bounds = bounds;
-    node->particles = particles;
 
     if (particles.size() <= 4 || currentDepth > MAX_TREE_DEPTH)
         return node;
@@ -84,13 +86,15 @@ int flattenTree(TreeNode* treeNode, std::vector<int>& particles, std::vector<Lin
         // parent
         linearNode->particleCount = -1;
 
+        ++(*offset);
         flattenTree(treeNode->children[0], particles, tree, offset);
         for(int i = 0; i < 3; ++i) {
-            linearNode->childOffset[i] = flattenTree(treeNode->children[i + 1], particles, tree, offset);
+            linearNode->childOffset[i] = ++(*offset);
+            flattenTree(treeNode->children[i + 1], particles, tree, offset);
         }
     }
 
-    return ++(*offset);
+    return *offset;
 }
 
 // Compute size of tree hierarchy

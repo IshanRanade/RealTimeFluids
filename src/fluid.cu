@@ -8,6 +8,7 @@
 #include <thrust/random.h>
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
+#include <locale>
 
 
 #define ERRORCHECK 1
@@ -35,6 +36,7 @@ void checkCUDAErrorFn2(const char *msg, const char *file, int line) {
 
 static LinearNode* dev_flatTree;
 static int* dev_particleIds;
+static int* particleIds;
 
 __device__ int getCellCompressedIndex(int x, int y, int z, int gridX, int gridY) {
     return z * gridX * gridY + y * gridX + x;
@@ -63,9 +65,9 @@ __global__ void fillVBOData(int n, void *vbo, MarkerParticle *particles) {
         vboFloat[6 * index + 2] = particle.worldPosition.z;
 
         // Set the color
-        vboFloat[6 * index + 3] = particle.color.x;
-        vboFloat[6 * index + 4] = particle.color.y;
-        vboFloat[6 * index + 5] = particle.color.z;
+        vboFloat[6 * index + 3] = 0.2f;
+        vboFloat[6 * index + 4] = 0.2f;
+        vboFloat[6 * index + 5] = 1.0f;
     }
 }
 
@@ -91,7 +93,7 @@ __device__ bool solveQuadratic(const float &a, const float &b, const float &c, f
 }
 
 // Intersection for node bounds
-__device__ float boundsIntersectionTest(Bounds b, glm::vec3 rayPos, glm::vec3 rayDir) {
+__device__ float boundsIntersectionTest(Bounds b, glm::vec3 rayPos, glm::vec3 rayDir, bool near = true) {
     float tmin = -999999.f;
     float tmax = 999999.f;
 
@@ -110,7 +112,7 @@ __device__ float boundsIntersectionTest(Bounds b, glm::vec3 rayPos, glm::vec3 ra
     }
 
     if (tmax >= tmin && tmax > 0) {
-        return tmin;
+        return near ? tmin : tmax;
     }
     return -1.f;
 }
@@ -140,6 +142,7 @@ __device__ float raySphereIntersect(glm::vec3 rayPos, glm::vec3 rayDir, glm::vec
     return t0;
 }
 
+#if SPHERE_MARCH
 __device__ float smin(float a, float b, float k) {
     const float h = glm::clamp(0.5f + 0.5f * (b - a) / k, 0.0f, 1.0f);
     return glm::mix(b, a, h) - k * h * (1.0f - h);
@@ -149,9 +152,16 @@ __device__ glm::vec4 smin(glm::vec3 vecA, glm::vec3 vecB, float a, float b, floa
     const float h = glm::clamp(0.5f + 0.5f * (b - a) / k, 0.0f, 1.0f);
     return glm::vec4(glm::mix(vecA, vecB, h), glm::mix(b, a, h) - k * h * (1.0f - h));
 }
+#endif
 
-__device__ bool inBounds(float value, float bounds) {
+__device__ bool inBounds(const float value, const float bounds) {
     return (value >= -bounds) && (value <= bounds);
+}
+
+__device__ bool inBounds(const glm::vec3 min, const glm::vec3 max, const glm::vec3 pos) {
+    return (pos.x >= min.x && pos.x <= max.x &&
+        pos.y >= min.y && pos.y <= max.y &&
+        pos.z >= min.z && pos.z <= max.z);
 }
 
 __global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* particles, Camera camera, GridCell* cells, LinearNode* tree, int* particleIds) {
@@ -162,7 +172,7 @@ __global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* partic
         // Setup variables
         bool intersected = false;
         glm::vec3 rayPos = camera.position;
-        float distance = 1000.0f;
+        float tMin = 1000.0f;
         const glm::vec3 view = camera.view;
         const glm::vec3 up = camera.up;
         const glm::vec3 right = camera.right;
@@ -178,7 +188,8 @@ __global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* partic
         // Quad tree traversal
         int nextOffset = 0;
         int currentNode = 0;
-        int nodesToVisit[64];
+        int nodesToVisit[32];
+        const float tMax = boundsIntersectionTest(tree[0].bounds, rayPos, rayDir, false);
         while(true) {
             LinearNode& node = tree[currentNode];
             const float boundsT = boundsIntersectionTest(node.bounds, rayPos, rayDir);
@@ -187,9 +198,9 @@ __global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* partic
                     for (int i = 0; i < node.particleCount; ++i) {
                         const int particleId = particleIds[node.particlesOffset + i];
                         const float t = raySphereIntersect(rayPos, rayDir, particles[particleId].worldPosition, PARTICLE_RADIUS);
-                        if (t > 0 && t < distance) {
+                        if (t > 0 && t < tMin) {
                             intersected = true;
-                            distance = t;
+                            tMin = t;
                             normal = glm::normalize(rayPos + (rayDir * t) - particles[particleId].worldPosition);
                         }
                     }
@@ -214,12 +225,12 @@ __global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* partic
             float t = raySphereIntersect(rayPos, rayDir, particle.worldPosition, PARTICLE_RADIUS);
             if (t > 0 && t < distance) {
                 intersected = true;
-                distance = t;
+                tMin = t;
                 normal = glm::normalize(rayPos + (rayDir * t) - particle.worldPosition);
             }
         }
 #endif
-        rayPos += rayDir * distance;
+        rayPos += rayDir * tMin;
 
 #elif SPHERE_MARCH
         int iterations = 0;
@@ -227,20 +238,20 @@ __global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* partic
         const float radius = 1.25f;
 
         // Sphere march for smoothed min marker particle
-        while (distance > radius && iterations < maxIterations) {
+        while (tMin > radius && iterations < maxIterations) {
             for (int i = 0; i < numParticles; ++i) {
                 MarkerParticle& particle = particles[i];
                 //distance = glm::min(distance, glm::distance(rayPos, particle.worldPosition));
-                distance = smin(distance, glm::distance(rayPos, particle.worldPosition), PARTICLE_RADIUS);
+                tMin = smin(tMin, glm::distance(rayPos, particle.worldPosition), PARTICLE_RADIUS);
                 if (distance < radius) {
                     normal = glm::normalize(rayPos - particle.worldPosition);
                     break;
                 }
             }
-            rayPos += rayDir * distance;
+            rayPos += rayDir * tMin;
             ++iterations;
         }
-        intersected = distance < radius;
+        intersected = tMin < radius;
 #endif
 
         const int index = idx + idy * camera.resolution.x;
@@ -248,10 +259,19 @@ __global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* partic
         // Set the color
         if (intersected) {
             // Ray hit a marker particle
-            //glm::vec3 color = glm::vec3(50.f, 50.f, 255.f);
-            glm::vec3 color = glm::abs(cells[getCellCompressedIndex(rayPos.x, rayPos.y, rayPos.z, GRID_X, GRID_Y)].velocity) * 40.0f;
+            glm::vec3 color = glm::vec3(50.f, 50.f, 240.f);
+
+            // Debug velocity color
+            //color = glm::abs(cells[getCellCompressedIndex(rayPos.x, rayPos.y, rayPos.z, GRID_X, GRID_Y)].velocity) * 40.0f;
+
+            // Debug cell type color
             //color = cells[getCellCompressedIndex(rayPos.x, rayPos.y, rayPos.z, GRID_X, GRID_Y)].cellType == FLUID ? color : glm::vec3(0);
-            const float depth = glm::clamp(glm::distance(rayPos, camera.position) / 10.0f, 0.0f, 1.0f); // camera depth not fluid depth
+
+#if QUAD_TREE
+            const float depth = glm::min((tMax - tMin) * 0.1f, 1.0f);
+            color = depth * color;
+#endif
+
             const glm::vec3 lightPos = glm::vec3(2, 1, 0);
             const float specularIntensity = 10.0f;
 
@@ -266,22 +286,48 @@ __global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* partic
         }
         else {
             // Clear background
-            pbo[index].x = 205.0f;
-            pbo[index].y = 205.0f;
-            pbo[index].z = 240.0f;
+            pbo[index].x = 0.0f;//205.0f;
+            pbo[index].y = 0.0f;//205.0f;
+            pbo[index].z = 0.0f;//240.0f;
             pbo[index].w = 0;
         }
     }
 }
 
-void raycastPBO(uchar4* pbo, Camera camera) {
-    // Initialize 3D quad tree hierarchy
-    std::vector<int> particles;
-    for (int i = 0; i < NUM_MARKER_PARTICLES; ++i) {
-        particles.push_back(i);
+__global__ void checkParticlesToRender(int* particleIds, MarkerParticle* particles, GridCell* cells) {
+    const int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (index >= NUM_MARKER_PARTICLES)
+        return;
+
+    const glm::vec3 cellPos = particles[index].worldPosition;
+    for (int x = -1; x <= 1; ++x) {
+        for (int y = -1; y <= 1; ++y) {
+            for (int z = -1; z <= 1; ++z) {
+                const int cellId = getCellCompressedIndex(cellPos.x + x, cellPos.y + y, cellPos.z + z, GRID_X, GRID_Y);
+                if (inBounds(glm::vec3(0), glm::vec3(GRID_X, GRID_Y, GRID_Z), cellPos + glm::vec3(x, y, z)) && cells[cellId].cellType == AIR) {
+                    particleIds[index] = index;
+                    return;
+                }
+            }
+        }
     }
+    particleIds[index] = -1;
+}
+
+void raycastPBO(uchar4* pbo, Camera camera) {
+#if QUAD_TREE
+    // Initialize flat 3D quad tree hierarchy
     cudaMemcpy(markerParticles, dev_markerParticles, NUM_MARKER_PARTICLES * sizeof(MarkerParticle), cudaMemcpyDeviceToHost);
+    checkParticlesToRender << <BLOCKS_PARTICLES, BLOCK_SIZE >> > (dev_particleIds, dev_markerParticles, dev_gridCells);
+    cudaMemcpy(particleIds, dev_particleIds, NUM_MARKER_PARTICLES * sizeof(int), cudaMemcpyDeviceToHost);
     checkCUDAError("copy marker particles to cpu failed");
+
+    std::vector<int> particles;
+    for(int i = 0; i < NUM_MARKER_PARTICLES; ++i) {
+        if(particleIds[i] != -1)
+            particles.push_back(i);
+    }
 
     TreeNode* root = buildTree(particles, markerParticles, 1, glm::vec3(0), glm::vec3(GRID_X, GRID_Y, GRID_Z));
     const int numNodes = treeSize(root);
@@ -294,9 +340,9 @@ void raycastPBO(uchar4* pbo, Camera camera) {
     flattenTree(root, particles, flatTree, &offset);
     deleteTree(root);
     cudaMemcpy(dev_flatTree, flatTree.data(), flatTree.size() * sizeof(LinearNode), cudaMemcpyHostToDevice);
+    cudaMemcpy(dev_particleIds, particles.data(), particles.size() * sizeof(int), cudaMemcpyHostToDevice);
     checkCUDAError("copy tree to device failed");
-    cudaMemcpy(dev_particleIds, particles.data(), NUM_MARKER_PARTICLES * sizeof(int), cudaMemcpyHostToDevice);
-    checkCUDAError("copy particle ids to device failed");
+#endif
 
     // Launch ray cast kernel
     const dim3 BLOCK_SIZE2d(8, 8);
@@ -373,8 +419,6 @@ __global__ void generateRandomWorldPositionsForParticles(int n, MarkerParticle *
 		particle.worldPosition.x = 0.1 * u01(rngX) * GRID_X * CELL_WIDTH;
 		particle.worldPosition.y = 0.5 * u01(rngX) * GRID_Y * CELL_WIDTH;// +0.4 * GRID_Y * CELL_WIDTH;
 		particle.worldPosition.z = 1.0 * u01(rngX) * GRID_Z * CELL_WIDTH;
-
-		particle.color = glm::vec3(0.2, 0.2, 1);
     }
 }
 
@@ -775,7 +819,7 @@ __global__ void extrapolateFluidVelocities(int numCells, GridCell* cells, int si
 
 void initHierarchicalPressureGrids() {
     // Calculate number of grid levels
-    MAX_GRID_LEVEL = 3;//std::floor(log2(std::min(std::min(GRID_X, GRID_Y), GRID_Z)));
+    MAX_GRID_LEVEL = 1;//std::floor(log2(std::min(std::min(GRID_X, GRID_Y), GRID_Z)));
 
     // Create grid array and primary grid
     grids = new Grid[MAX_GRID_LEVEL];
@@ -835,6 +879,7 @@ void initSim() {
     checkCUDAError("allocating space for flat tree failed");
     cudaDeviceSynchronize();
 
+    particleIds = (int*)malloc(NUM_MARKER_PARTICLES * sizeof(int));
     valA = (float*)malloc(NUM_CELLS * 7 * sizeof(float));
     colIndA = (int*)malloc(NUM_CELLS * 6 * sizeof(int));
     vecB = (float*)malloc(NUM_CELLS * sizeof(float));
@@ -846,6 +891,7 @@ void freeSim() {
     cudaFree(dev_gridCells);
     cudaFree(dev_flatTree);
     cudaFree(dev_particleIds);
+    free(particleIds);
     free(markerParticles);
     free(vecB);
     free(vecX);
