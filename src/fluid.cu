@@ -473,6 +473,7 @@ __global__ void applyExternalForcesToGridCells(int n, GridCell *cells) {
 		}
     }
 }
+
 __global__ void moveMarkerParticlesThroughField(int n, GridCell *cells, MarkerParticle *particles) {
     const int index = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -592,6 +593,7 @@ __global__ void applyViscosity(int n, GridCell *cells) {
         GridCell &cell = cells[index];
 
 		if (cell.cellType != FLUID) {
+			cell.tempVelocity = cell.velocity;
 			return;
 		}
 
@@ -601,53 +603,85 @@ __global__ void applyViscosity(int n, GridCell *cells) {
 		float laplacianY = 0.0;
 		float laplacianZ = 0.0;
 
+		int count = 0;
+
 		if (cellCoords.x + 1 < GRID_X) {
 			int adjacent = getCellCompressedIndex(cellCoords.x + 1, cellCoords.y, cellCoords.z, GRID_X, GRID_Y);
-			laplacianX += cells[adjacent].velocity.x;
-			laplacianY += cells[adjacent].velocity.y;
-			laplacianZ += cells[adjacent].velocity.z;
+
+			if (cells[adjacent].cellType == FLUID) {
+				count++;
+
+				laplacianX += cells[adjacent].velocity.x;
+				laplacianY += cells[adjacent].velocity.y;
+				laplacianZ += cells[adjacent].velocity.z;
+			}
 		}
 
 		if (cellCoords.x - 1 >= 0) {
 			int adjacent = getCellCompressedIndex(cellCoords.x - 1, cellCoords.y, cellCoords.z, GRID_X, GRID_Y);
-			laplacianX += cells[adjacent].velocity.x;
-			laplacianY += cells[adjacent].velocity.y;
-			laplacianZ += cells[adjacent].velocity.z;
+
+			if (cells[adjacent].cellType == FLUID) {
+				count++;
+
+				laplacianX += cells[adjacent].velocity.x;
+				laplacianY += cells[adjacent].velocity.y;
+				laplacianZ += cells[adjacent].velocity.z;
+			}
 		}
 
 
 		if (cellCoords.y + 1 < GRID_Y) {
 			int adjacent = getCellCompressedIndex(cellCoords.x, cellCoords.y + 1, cellCoords.z, GRID_X, GRID_Y);
-			laplacianX += cells[adjacent].velocity.x;
-			laplacianY += cells[adjacent].velocity.y;
-			laplacianZ += cells[adjacent].velocity.z;
+
+			if (cells[adjacent].cellType == FLUID) {
+				count++;
+
+				laplacianX += cells[adjacent].velocity.x;
+				laplacianY += cells[adjacent].velocity.y;
+				laplacianZ += cells[adjacent].velocity.z;
+			}
 		}
 
 		if (cellCoords.y - 1 >= 0) {
 			int adjacent = getCellCompressedIndex(cellCoords.x, cellCoords.y - 1, cellCoords.z, GRID_X, GRID_Y);
-			laplacianX += cells[adjacent].velocity.x;
-			laplacianY += cells[adjacent].velocity.y;
-			laplacianZ += cells[adjacent].velocity.z;
+
+			if (cells[adjacent].cellType == FLUID) {
+				count++;
+
+				laplacianX += cells[adjacent].velocity.x;
+				laplacianY += cells[adjacent].velocity.y;
+				laplacianZ += cells[adjacent].velocity.z;
+			}
 		}
 
 
 		if (cellCoords.z + 1 < GRID_Z) {
 			int adjacent = getCellCompressedIndex(cellCoords.x, cellCoords.y, cellCoords.z + 1, GRID_X, GRID_Y);
-			laplacianX += cells[adjacent].velocity.x;
-			laplacianY += cells[adjacent].velocity.y;
-			laplacianZ += cells[adjacent].velocity.z;
+
+			if (cells[adjacent].cellType == FLUID) {
+				count++;
+
+				laplacianX += cells[adjacent].velocity.x;
+				laplacianY += cells[adjacent].velocity.y;
+				laplacianZ += cells[adjacent].velocity.z;
+			}
 		}
 
 		if (cellCoords.z - 1 >= 0) {
 			int adjacent = getCellCompressedIndex(cellCoords.x, cellCoords.y, cellCoords.z - 1, GRID_X, GRID_Y);
-			laplacianX += cells[adjacent].velocity.x;
-			laplacianY += cells[adjacent].velocity.y;
-			laplacianZ += cells[adjacent].velocity.z;
+
+			if (cells[adjacent].cellType == FLUID) {
+				count++;
+
+				laplacianX += cells[adjacent].velocity.x;
+				laplacianY += cells[adjacent].velocity.y;
+				laplacianZ += cells[adjacent].velocity.z;
+			}
 		}
 
-        laplacianX -= 6 * cell.velocity.x;
-        laplacianY -= 6 * cell.velocity.y;
-        laplacianZ -= 6 * cell.velocity.z;
+        laplacianX -= count * cell.velocity.x;
+        laplacianY -= count * cell.velocity.y;
+        laplacianZ -= count * cell.velocity.z;
 
         cell.tempVelocity = cell.velocity + TIME_STEP * VISCOSITY * glm::vec3(laplacianX, laplacianY, laplacianZ);
     }
