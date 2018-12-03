@@ -438,6 +438,103 @@ __global__ void generateRandomWorldPositionsForParticles(int n, MarkerParticle *
     }
 }
 
+__device__ glm::vec3 getInterpolatedVelocity(int cellIndex, glm::vec3 particlePosition, GridCell *cells) {
+	glm::vec3 cellCoords = getCellUncompressedCoordinates(cellIndex, GRID_X, GRID_Y);
+	glm::vec3 cellCenter = cellCoords + glm::vec3(0.5, 0.5, 0.5);
+
+	int cellXPlusIndex;
+	int cellXMinusIndex;
+	float xLerp;
+	if (particlePosition.x >= cellCenter.x) {
+		cellXMinusIndex = cellIndex;
+
+		if (cellCoords.x + 1 < GRID_X) {
+			cellXPlusIndex = getCellCompressedIndex(cellCoords.x + 1, cellCoords.y, cellCoords.z, GRID_X, GRID_Y);
+			xLerp = particlePosition.x - cellCenter.x;
+		}
+		else {
+			cellXPlusIndex = cellIndex;
+			xLerp = 1.0f;
+		}
+	}
+	else {
+		cellXPlusIndex = cellIndex;
+
+		if (cellCoords.x - 1 >= 0) {
+			cellXMinusIndex = getCellCompressedIndex(cellCoords.x - 1, cellCoords.y, cellCoords.z, GRID_X, GRID_Y);
+			xLerp = particlePosition.x - (cellCenter.x - 1);
+		}
+		else {
+			cellXMinusIndex = cellIndex;
+			xLerp = 1.0f;
+		}
+	}
+
+	int cellYPlusIndex;
+	int cellYMinusIndex;
+	float yLerp;
+	if (particlePosition.y >= cellCenter.y) {
+		cellYMinusIndex = cellIndex;
+
+		if (cellCoords.y + 1 < GRID_Y) {
+			cellYPlusIndex = getCellCompressedIndex(cellCoords.x, cellCoords.y + 1, cellCoords.z, GRID_X, GRID_Y);
+			yLerp = particlePosition.y - cellCenter.y;
+		}
+		else {
+			cellYPlusIndex = cellIndex;
+			yLerp = 1.0f;
+		}
+	}
+	else {
+		cellYPlusIndex = cellIndex;
+
+		if (cellCoords.y - 1 >= 0) {
+			cellYMinusIndex = getCellCompressedIndex(cellCoords.x, cellCoords.y - 1, cellCoords.z, GRID_X, GRID_Y);
+			yLerp = particlePosition.y - (cellCenter.y - 1);
+		}
+		else {
+			cellYMinusIndex = cellIndex;
+			yLerp = 1.0f;
+		}
+	}
+
+
+	int cellZPlusIndex;
+	int cellZMinusIndex;
+	float zLerp;
+	if (particlePosition.z >= cellCenter.z) {
+		cellZMinusIndex = cellIndex;
+
+		if (cellCoords.z + 1 < GRID_Z) {
+			cellZPlusIndex = getCellCompressedIndex(cellCoords.x, cellCoords.y, cellCoords.z + 1, GRID_X, GRID_Y);
+			zLerp = particlePosition.z - cellCenter.z;
+		}
+		else {
+			cellZPlusIndex = cellIndex;
+			zLerp = 1.0f;
+		}
+	}
+	else {
+		cellZPlusIndex = cellIndex;
+
+		if (cellCoords.z - 1 >= 0) {
+			cellZMinusIndex = getCellCompressedIndex(cellCoords.x, cellCoords.y, cellCoords.z - 1, GRID_X, GRID_Y);
+			zLerp = particlePosition.z - (cellCenter.z - 1);
+		}
+		else {
+			cellZMinusIndex = cellIndex;
+			zLerp = 1.0f;
+		}
+	}
+
+	glm::vec3 interpolatedVelocity;
+	interpolatedVelocity.x = cells[cellXMinusIndex].velocity.x * (1.0f - xLerp) + cells[cellXPlusIndex].velocity.x * xLerp;
+	interpolatedVelocity.y = cells[cellYMinusIndex].velocity.y * (1.0f - yLerp) + cells[cellYPlusIndex].velocity.y * yLerp;
+	interpolatedVelocity.z = cells[cellZMinusIndex].velocity.z * (1.0f - zLerp) + cells[cellZPlusIndex].velocity.z * zLerp;
+
+	return interpolatedVelocity;
+}
+
 __global__ void backwardsParticleTrace(int n, GridCell* cells) {
     const int index = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -446,7 +543,13 @@ __global__ void backwardsParticleTrace(int n, GridCell* cells) {
 
         // For now just use simple Euler
         const glm::vec3 cellPosition = (getCellUncompressedCoordinates(index, GRID_X, GRID_Y) * CELL_WIDTH) + glm::vec3(CELL_WIDTH / 2.0, CELL_WIDTH / 2.0, CELL_WIDTH / 2.0);
-        const glm::vec3 oldPosition = cellPosition - TIME_STEP * cell.velocity;
+        
+		const glm::vec3 rungeKuttaPosition = cellPosition + (TIME_STEP / 2.0f) * cell.velocity;
+
+		glm::vec3 interpolatedVelocity = getInterpolatedVelocity(getCellCompressedIndex(rungeKuttaPosition.x, rungeKuttaPosition.y, rungeKuttaPosition.z, GRID_X, GRID_Y), rungeKuttaPosition, cells);
+
+
+		const glm::vec3 oldPosition = cellPosition - TIME_STEP * interpolatedVelocity;
 
 		if (oldPosition.x < 0 || oldPosition.x >= GRID_X || oldPosition.y < 0 || oldPosition.y >= GRID_Y || oldPosition.z < 0 || oldPosition.z >= GRID_Z) {
 			return;
@@ -486,99 +589,8 @@ __global__ void moveMarkerParticlesThroughField(int n, GridCell *cells, MarkerPa
 		glm::vec3 cellCoords = getCellUncompressedCoordinates(cellIndex, GRID_X, GRID_Y);
 		glm::vec3 cellCenter = cellCoords + glm::vec3(0.5, 0.5, 0.5);
         
-		int cellXPlusIndex;
-		int cellXMinusIndex;
-		float xLerp;
-		if (particle.worldPosition.x >= cellCenter.x) {
-			cellXMinusIndex = cellIndex;
-
-			if (cellCoords.x + 1 < GRID_X) {
-				cellXPlusIndex = getCellCompressedIndex(cellCoords.x + 1, cellCoords.y, cellCoords.z, GRID_X, GRID_Y);
-				xLerp = particle.worldPosition.x - cellCenter.x;
-			}
-			else {
-				cellXPlusIndex = cellIndex;
-				xLerp = 1.0f;
-			}
-		}
-		else {
-			cellXPlusIndex = cellIndex;
-
-			if (cellCoords.x - 1 >= 0) {
-				cellXMinusIndex = getCellCompressedIndex(cellCoords.x - 1, cellCoords.y, cellCoords.z, GRID_X, GRID_Y);
-				xLerp = particle.worldPosition.x - (cellCenter.x - 1);
-			}
-			else {
-				cellXMinusIndex = cellIndex;
-				xLerp = 1.0f;
-			}
-		}
-
-		int cellYPlusIndex;
-		int cellYMinusIndex;
-		float yLerp;
-		if (particle.worldPosition.y >= cellCenter.y) {
-			cellYMinusIndex = cellIndex;
-
-			if (cellCoords.y + 1 < GRID_Y) {
-				cellYPlusIndex = getCellCompressedIndex(cellCoords.x, cellCoords.y + 1, cellCoords.z, GRID_X, GRID_Y);
-				yLerp = particle.worldPosition.y - cellCenter.y;
-			}
-			else {
-				cellYPlusIndex = cellIndex;
-				yLerp = 1.0f;
-			}
-		}
-		else {
-			cellYPlusIndex = cellIndex;
-
-			if (cellCoords.y - 1 >= 0) {
-				cellYMinusIndex = getCellCompressedIndex(cellCoords.x, cellCoords.y - 1, cellCoords.z, GRID_X, GRID_Y);
-				yLerp = particle.worldPosition.y - (cellCenter.y - 1);
-			}
-			else {
-				cellYMinusIndex = cellIndex;
-				yLerp = 1.0f;
-			}
-		}
-
-
-		int cellZPlusIndex;
-		int cellZMinusIndex;
-		float zLerp;
-		if (particle.worldPosition.z >= cellCenter.z) {
-			cellZMinusIndex = cellIndex;
-
-			if (cellCoords.z + 1 < GRID_Z) {
-				cellZPlusIndex = getCellCompressedIndex(cellCoords.x, cellCoords.y, cellCoords.z + 1, GRID_X, GRID_Y);
-				zLerp = particle.worldPosition.z - cellCenter.z;
-			}
-			else {
-				cellZPlusIndex = cellIndex;
-				zLerp = 1.0f;
-			}
-		}
-		else {
-			cellZPlusIndex = cellIndex;
-
-			if (cellCoords.z - 1 >= 0) {
-				cellZMinusIndex = getCellCompressedIndex(cellCoords.x, cellCoords.y, cellCoords.z - 1, GRID_X, GRID_Y);
-				zLerp = particle.worldPosition.z - (cellCenter.z - 1);
-			}
-			else {
-				cellZMinusIndex = cellIndex;
-				zLerp = 1.0f;
-			}
-		}
-		
-		//printf("%f\n", zLerp);
-
-
-		glm::vec3 interpolatedVelocity;
-		interpolatedVelocity.x = cells[cellXMinusIndex].velocity.x * (1.0f - xLerp) + cells[cellXPlusIndex].velocity.x * xLerp;
-		interpolatedVelocity.y = cells[cellYMinusIndex].velocity.y * (1.0f - yLerp) + cells[cellYPlusIndex].velocity.y * yLerp;
-		interpolatedVelocity.z = cells[cellZMinusIndex].velocity.z * (1.0f - zLerp) + cells[cellZPlusIndex].velocity.z * zLerp;
-
+		glm::vec3 interpolatedVelocity = getInterpolatedVelocity(cellIndex, particle.worldPosition, cells);
+	
         particle.worldPosition += TIME_STEP * interpolatedVelocity;
         particle.worldPosition.x = glm::clamp(particle.worldPosition.x, 0.01f, GRID_X * CELL_WIDTH - 0.01f);
         particle.worldPosition.y = glm::clamp(particle.worldPosition.y, 0.01f, GRID_Y * CELL_WIDTH - 0.01f);
@@ -702,6 +714,9 @@ __global__ void setupPressureCalc(Grid grid, GridCell* cells) {
     if (index >= grid.numCells)
         return;
 
+	if (cells[index].cellType == AIR)
+		return;
+
     const glm::vec3 cellPos = getCellUncompressedCoordinates(index, grid.sizeX, grid.sizeY);
 
     int nonSolid = -6;
@@ -724,7 +739,10 @@ __global__ void setupPressureCalc(Grid grid, GridCell* cells) {
 
 		if (adjacentCell.cellType == AIR) {
 			grid.dev_colIndA[index * 6 + i] = -1;
+			//++nonSolid;
 			airCells += 1.0f;
+			continue;
+			
 		}
 
         // Set index of adjacent cell
@@ -777,7 +795,7 @@ __global__ void setupPressureCalc(Grid grid, GridCell* cells) {
     divU += (divPlus - divMinus);
     divU /= CELL_WIDTH;
 
-    grid.dev_B[index] = divU * (cell.cellType == FLUID ? FLUID_DENSITY : AIR_DENSITY) / (TIME_STEP);
+    grid.dev_B[index] = divU * (cell.cellType == FLUID ? FLUID_DENSITY : AIR_DENSITY) / (TIME_STEP) - airCells;
 	
 	if (cell.cellType == AIR) {
 		grid.dev_B[index] = 0.0f;
@@ -841,7 +859,7 @@ __global__ void setAirCellPressureAndVelocity(int numCells, GridCell* cells) {
 
 		if (cell.cellType == AIR) {
 
-			glm::vec3 cellPos = getCellUncompressedCoordinates(index, GRID_X, GRID_Y);
+		/*	glm::vec3 cellPos = getCellUncompressedCoordinates(index, GRID_X, GRID_Y);
 			if (cellPos.y - 1 >= 0) {
 				int belowCellIndex = getCellCompressedIndex(cellPos.x, cellPos.y - 1, cellPos.z, GRID_X, GRID_Y);
 				
@@ -850,7 +868,7 @@ __global__ void setAirCellPressureAndVelocity(int numCells, GridCell* cells) {
 					cell.tempVelocity = cell.velocity;
 					return;
 				}
-			}
+			}*/
             cell.pressure = -1.0f;
 			cell.tempVelocity = cell.velocity;
         }
