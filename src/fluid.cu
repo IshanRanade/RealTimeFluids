@@ -380,6 +380,7 @@ __global__ void setAllGridCellsToAir(int n, GridCell *cells) {
     if (index < n) {
         GridCell &cell = cells[index];
         cell.cellType = AIR;
+		cell.layer = -1;
     }
 }
 
@@ -392,6 +393,7 @@ __global__ void setGridCellsWithMarkerParticleToFluid(int n, GridCell* cells, Ma
         const int compressedCellIndex = getCellCompressedIndex(particle.worldPosition.x / CELL_WIDTH, particle.worldPosition.y / CELL_WIDTH, particle.worldPosition.z / CELL_WIDTH, GRID_X, GRID_Y);
 
         cells[compressedCellIndex].cellType = FLUID;
+		cells[compressedCellIndex].layer = 0;
 
         //cells[compressedCellIndex].velocity = glm::vec3(0, -0.1, 0);
 
@@ -880,7 +882,7 @@ __global__ void setAirCellPressureAndVelocity(int numCells, GridCell* cells) {
 					return;
 				}
 			}
-            cell.pressure = ATMOSPHERIC_PRESSURE;
+            cell.pressure = -ATMOSPHERIC_PRESSURE;
 			//cell.velocity = glm::vec3(0.0);
         }
 	}
@@ -975,46 +977,42 @@ __global__ void setVelocitiesIntoSolidsAsZero(int numCells, GridCell* cells) {
 	}
 }
 
-__global__ void extrapolateFluidVelocities(int numCells, GridCell* cells, int size)
+__global__ void extrapolateFluidVelocities(int numCells, GridCell* cells, int layer)
 {
     const int index = blockIdx.x * blockDim.x + threadIdx.x;
 
-    if (index < numCells)
-    {
-        GridCell &cell = cells[index];
+	if (index < numCells)
+	{
+		GridCell &cell = cells[index];
+		glm::vec3 cellPos = getCellUncompressedCoordinates(index, GRID_X, GRID_Y);
 
-        if (cell.cellType == AIR) {
-            glm::vec3 pos = getCellUncompressedCoordinates(index, GRID_X, GRID_Y);
+		glm::vec3 averageVelocity = glm::vec3(0.0f);
+		int count = 0;
+		if (cell.layer == -1) {
+			for (int d = 0; d < 6; ++d) {
+				const int x = d == 0 ? -1 : d == 1 ? 1 : 0;
+				const int y = d == 2 ? -1 : d == 3 ? 1 : 0;
+				const int z = d == 4 ? -1 : d == 5 ? 1 : 0;
 
-            glm::vec3 averageVelocity = glm::vec3(0.0);
-            int count = 0;
-            for (int x = -size; x <= size; x++)
-            {
-                for (int y = size; y <= size; y++)
-                {
-                    for (int z = -size; z <= size; z++)
-                    {
-                        if (pos.x + x >= 0 && pos.x < GRID_X &&
-                            pos.y + y >= 0 && pos.y < GRID_Y &&
-                            pos.z + z >= 0 && pos.z < GRID_Z)
-                        {
-                            int surroundingVelocityIndex = getCellCompressedIndex(pos.x + x, pos.y + y, pos.z + z, GRID_X, GRID_Y);
-                            
-							if (cells[surroundingVelocityIndex].cellType == FLUID) {
-								averageVelocity += cells[surroundingVelocityIndex].velocity;
-								++count;
-							}
-                        }
-                    }
-                }
-            }
+				if (cellPos.x + x >= 0 && cellPos.x + x < GRID_X && cellPos.y + y >= 0 && cellPos.y + y < GRID_Y &&cellPos.z + z >= 0 && cellPos.z + z < GRID_Z) {
+					int adjacentCell = getCellCompressedIndex(cellPos.x + x, cellPos.y + y, cellPos.z + z, GRID_X, GRID_Y);
 
-            cell.tempVelocity = averageVelocity / float(count) / 2.0f;
+					if (cells[adjacentCell].layer == layer - 1) {
+						//if (cells[adjacentCell].cellType != FLUID) {
+							averageVelocity += cells[adjacentCell].velocity;
+							count++;
+						//}
+					}
+				}
+			}
+
+			cell.layer = layer;
+			cell.tempVelocity = (averageVelocity + cell.velocity) / (float(count) + 1.0f);
 		}
 		else {
 			cell.tempVelocity = cell.velocity;
 		}
-    }
+	}
 }
 
 void initHierarchicalPressureGrids() {
@@ -1193,13 +1191,15 @@ void iterateSim() {
 
 
 	// Extrapolate fluid velocities into surrounding cells
-	//extrapolateFluidVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells, 1);
-	//checkCUDAError("extrapolating velocities failed");
-	//cudaDeviceSynchronize();
+	for (int i = 1; i < 10; i++) {
+		extrapolateFluidVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells, i);
+		checkCUDAError("extrapolating velocities failed");
+		cudaDeviceSynchronize();
 
-	//swapCellVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
-	//checkCUDAError("swapping velocities in cells failed");
-	//cudaDeviceSynchronize();
+		swapCellVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
+		checkCUDAError("swapping velocities in cells failed");
+		cudaDeviceSynchronize();
+	}
 	
 
 	setVelocitiesIntoSolidsAsZero << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);

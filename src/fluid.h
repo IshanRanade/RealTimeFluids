@@ -10,6 +10,7 @@ static enum CellType {
 };
 
 static struct GridCell {
+	int layer;
 	CellType cellType;
 	float pressure;
 	glm::vec3 velocity;
@@ -46,7 +47,7 @@ static struct Grid {
 #define CELL_WIDTH 1.0f
 #define WIDTH_DIV_TIME (CELL_WIDTH / TIME_STEP)
 
-#define NUM_MARKER_PARTICLES NUM_CELLS * 1000
+#define NUM_MARKER_PARTICLES NUM_CELLS * 2000
 #define PARTICLE_RADIUS 0.1f
 
 #define MAX_VELOCITY 10.0f
@@ -54,7 +55,7 @@ static struct Grid {
 #define VISCOSITY 1.0f
 #define FLUID_DENSITY 100.0f
 #define AIR_DENSITY 1.0f
-#define ATMOSPHERIC_PRESSURE 1.0f
+#define ATMOSPHERIC_PRESSURE 50.0f
 #define GAUSS_ITERATIONS 16
 
 #define BLOCK_SIZE 256
