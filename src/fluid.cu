@@ -195,7 +195,7 @@ __global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* partic
         while(true) {
             LinearNode& node = tree[currentNode];
             const float boundsT = boundsIntersectionTest(node.bounds, rayPos, rayDir);
-            if(boundsT > 0) {
+            if(boundsT > 0 && boundsT < tMin) {
                 if(node.particleCount > 0) {
                     for (int i = 0; i < node.particleCount; ++i) {
                         const int particleId = particleIds[node.particlesOffset + i];
@@ -225,7 +225,7 @@ __global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* partic
             MarkerParticle& particle = particles[i];
 
             float t = raySphereIntersect(rayPos, rayDir, particle.worldPosition, PARTICLE_RADIUS);
-            if (t > 0 && t < distance) {
+            if (t > 0 && t < tMin) {
                 intersected = true;
                 tMin = t;
                 normal = glm::normalize(rayPos + (rayDir * t) - particle.worldPosition);
@@ -269,7 +269,7 @@ __global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* partic
             // Debug cell type color
             //color = cells[getCellCompressedIndex(rayPos.x, rayPos.y, rayPos.z, GRID_X, GRID_Y)].cellType == FLUID ? color : glm::vec3(0);
 
-#if QUAD_TREE && RAY_CAST
+#if QUAD_TREE & RAY_CAST
             const float depth = glm::min((tMax - tMin) * 0.1f, 1.0f);
             color = depth * color;
 #endif
@@ -280,7 +280,7 @@ __global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* partic
             const glm::vec3 refl = glm::normalize(glm::normalize(camera.position - rayPos) + glm::normalize(lightPos));
             const float specularTerm = glm::pow(glm::max(glm::dot(refl, normal), 0.0f), specularIntensity);
 
-            //color = color * (depth + specularTerm);
+            color = color * (depth + specularTerm);
             pbo[index].x = glm::min(color.x, 255.0f);
             pbo[index].y = glm::min(color.y, 255.0f);
             pbo[index].z = glm::min(color.z, 255.0f);
@@ -303,20 +303,20 @@ __global__ void checkParticlesToRender(int* particleIds, MarkerParticle* particl
         return;
 
     const glm::vec3 cellPos = particles[index].worldPosition;
-    for (int x = -1; x <= 1; ++x) {
-        for (int y = -1; y <= 1; ++y) {
-            for (int z = -1; z <= 1; ++z) {
-                const int cellId = getCellCompressedIndex(cellPos.x + x, cellPos.y + y, cellPos.z + z, GRID_X, GRID_Y);
-                if(inBounds(glm::vec3(0), glm::vec3(GRID_X, GRID_Y, GRID_Z), cellPos + glm::vec3(x, y, z))) {
-                    if (cells[cellId].cellType == AIR) {
-                        particleIds[index] = index;
-                        return;
-                    }
-                } else {
-                    particleIds[index] = index;
-                    return;
-                }
+    for (int d = 0; d < 6; ++d) {
+        const int x = d == 0 ? -1 : d == 1 ? 1 : 0;
+        const int y = d == 2 ? -1 : d == 3 ? 1 : 0;
+        const int z = d == 4 ? -1 : d == 5 ? 1 : 0;
+        const int cellId = getCellCompressedIndex(cellPos.x + x, cellPos.y + y, cellPos.z + z, GRID_X, GRID_Y);
+
+        if(inBounds(glm::vec3(0), glm::vec3(GRID_X, GRID_Y, GRID_Z), cellPos + glm::vec3(x, y, z))) {
+            if (cells[cellId].cellType == AIR) {
+                particleIds[index] = index;
+                return;
             }
+        } else {
+            particleIds[index] = index;
+            return;
         }
     }
     particleIds[index] = -1;
@@ -347,8 +347,12 @@ void raycastPBO(uchar4* pbo, Camera camera) {
     flattenTree(root, particles, flatTree, &offset);
     deleteTree(root);
     cudaMemcpy(dev_flatTree, flatTree.data(), flatTree.size() * sizeof(LinearNode), cudaMemcpyHostToDevice);
-    cudaMemcpy(dev_particleIds, particles.data(), particles.size() * sizeof(int), cudaMemcpyHostToDevice);
     checkCUDAError("copy tree to device failed");
+    if(particles.size() <= NUM_MARKER_PARTICLES)
+        cudaMemcpy(dev_particleIds, particles.data(), particles.size() * sizeof(int), cudaMemcpyHostToDevice);
+    else
+        cudaMemcpy(dev_particleIds, particles.data(), NUM_MARKER_PARTICLES * sizeof(int), cudaMemcpyHostToDevice);
+    checkCUDAError("copy particle ids to device failed");
 #endif
 
     // Launch ray cast kernel

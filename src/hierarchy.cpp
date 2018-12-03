@@ -40,15 +40,15 @@ TreeNode* buildTree(std::vector<int>& oldParticles, MarkerParticle* markerPartic
     } else {
         bounds.min.y = yMin;
         bounds.max.y = yMax;
-        bounds.min -= glm::vec3(PARTICLE_RADIUS);
-        bounds.max += glm::vec3(PARTICLE_RADIUS);
+        bounds.min -= glm::vec3(PARTICLE_RADIUS * 2.0f);
+        bounds.max += glm::vec3(PARTICLE_RADIUS * 2.0f);
     }
     node->bounds = bounds;
 
     if (particles.size() <= 4 || currentDepth > MAX_TREE_DEPTH)
         return node;
 
-    // build child nodes
+    // Build child nodes
     const glm::vec3 center = bounds.min + ((bounds.max - bounds.min) / 2.0f);
     node->children.push_back(buildTree(particles, markerParticles, currentDepth + 1, bounds.min, glm::vec3(center.x, bounds.max.y, center.z))); // LL
     node->children.push_back(buildTree(particles, markerParticles, currentDepth + 1, glm::vec3(center.x, bounds.min.y, center.z), bounds.max)); // UR
@@ -97,7 +97,7 @@ int flattenTree(TreeNode* treeNode, std::vector<int>& particles, std::vector<Lin
     return *offset;
 }
 
-// Compute size of tree hierarchy
+// Free tree memory
 void deleteTree(TreeNode* node) {
     if (!node->children.empty()) {
         for (int i = 0; i < 4; ++i) {
