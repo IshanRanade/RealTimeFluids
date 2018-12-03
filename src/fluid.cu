@@ -718,11 +718,14 @@ __global__ void setupPressureCalc(Grid grid, GridCell* cells) {
             continue;
         }
 
+
 		const int adjacent = getCellCompressedIndex(cellPos.x + x, cellPos.y + y, cellPos.z + z, grid.sizeX, grid.sizeY);
         GridCell& adjacentCell = cells[adjacent];
 
-        if (adjacentCell.cellType == AIR)
-            airCells += 1.0f;
+		if (adjacentCell.cellType == AIR) {
+			grid.dev_colIndA[index * 6 + i] = -1;
+			airCells += 1.0f;
+		}
 
         // Set index of adjacent cell
         grid.dev_colIndA[index * 6 + i] = adjacent;
@@ -775,6 +778,10 @@ __global__ void setupPressureCalc(Grid grid, GridCell* cells) {
     divU /= CELL_WIDTH;
 
     grid.dev_B[index] = divU * (cell.cellType == FLUID ? FLUID_DENSITY : AIR_DENSITY) / (TIME_STEP);
+	
+	if (cell.cellType == AIR) {
+		grid.dev_B[index] = 0.0f;
+	}
 }
 
 __global__ void gaussSeidelPressure(Grid grid, int redBlack) {
