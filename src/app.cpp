@@ -134,11 +134,32 @@ void App::initGL() {
 }
 
 void App::start() {
+	fps = 0;
+	fpstracker = 0;
+	seconds = time(NULL);
+
 	while (!glfwWindowShouldClose(window)) {
+		
+
 		if (camchanged) {
 			camera->update();
 			camchanged = false;
 		}
+
+		time_t seconds2 = time(NULL);
+
+		//if (seconds2 - seconds >= 1) {
+			//printf("here");
+			fps = fpstracker / difftime(seconds2, seconds);
+			//fpstracker = 0;
+			//seconds = seconds2;
+		//}
+		fpstracker++;
+
+		//printf("%d\n", difftime(seconds2, seconds));
+
+		std::string title = "Real Time Fluids: " + std::to_string(fps) + " FPS";
+		glfwSetWindowTitle(window, title.c_str());
 
 		runSim();
 

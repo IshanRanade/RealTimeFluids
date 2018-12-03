@@ -289,7 +289,7 @@ __global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* partic
             const glm::vec3 refl = glm::normalize(glm::normalize(camera.position - rayPos) + glm::normalize(lightPos));
             const float specularTerm = glm::pow(glm::max(glm::dot(refl, normal), 0.0f), specularIntensity);
 
-            color = color * (specularTerm);
+            color = color * (1.0f+specularTerm);
             pbo[index].x = glm::min(color.x, 255.0f);
             pbo[index].y = glm::min(color.y, 255.0f);
             pbo[index].z = glm::min(color.z, 255.0f);
@@ -550,6 +550,10 @@ __global__ void backwardsParticleTrace(int n, GridCell* cells) {
         
 		const glm::vec3 rungeKuttaPosition = cellPosition - (TIME_STEP / 2.0f) * cell.velocity;
 
+		if (rungeKuttaPosition.x < 0 || rungeKuttaPosition.x >= GRID_X || rungeKuttaPosition.y < 0 || rungeKuttaPosition.y >= GRID_Y || rungeKuttaPosition.z < 0 || rungeKuttaPosition.z >= GRID_Z) {
+			return;
+		}
+
 		glm::vec3 interpolatedVelocity = getInterpolatedVelocity(getCellCompressedIndex(rungeKuttaPosition.x, rungeKuttaPosition.y, rungeKuttaPosition.z, GRID_X, GRID_Y), rungeKuttaPosition, cells);
 
 
@@ -799,7 +803,7 @@ __global__ void setupPressureCalc(Grid grid, GridCell* cells) {
     divU += (divPlus - divMinus);
     divU /= CELL_WIDTH;
 
-    grid.dev_B[index] = divU * (cell.cellType == FLUID ? FLUID_DENSITY : AIR_DENSITY) / (TIME_STEP) - airCells;
+    grid.dev_B[index] = divU * (cell.cellType == FLUID ? FLUID_DENSITY : AIR_DENSITY) / (TIME_STEP) - ATMOSPHERIC_PRESSURE * airCells;
 	
 	if (cell.cellType == AIR) {
 		grid.dev_B[index] = 0.0f;
@@ -838,9 +842,12 @@ void gaussSeidelPressureCPU(int numCells, float* valA, int* colIndA, float* vecX
 __global__ void copyPressureToCells(int numCells, float* pressure, GridCell* cells) {
     const int index = blockIdx.x * blockDim.x + threadIdx.x;
     if (index < numCells) {
-        //if (index < 100)
-            //printf("%d: %f\n", index, cells[index].velocity.y);
-		cells[index].pressure = cells[index].cellType == AIR ? 1.0f : pressure[index];
+		/*if (index < 100) {
+			if (cells[index].cellType == FLUID) {
+				printf("%d: %f\n", index, cells[index].pressure);
+			}
+		}*/
+		cells[index].pressure = cells[index].cellType == AIR ? ATMOSPHERIC_PRESSURE : pressure[index];
     }
 }
 
@@ -863,18 +870,18 @@ __global__ void setAirCellPressureAndVelocity(int numCells, GridCell* cells) {
 
 		if (cell.cellType == AIR) {
 
-		/*	glm::vec3 cellPos = getCellUncompressedCoordinates(index, GRID_X, GRID_Y);
+			glm::vec3 cellPos = getCellUncompressedCoordinates(index, GRID_X, GRID_Y);
 			if (cellPos.y - 1 >= 0) {
 				int belowCellIndex = getCellCompressedIndex(cellPos.x, cellPos.y - 1, cellPos.z, GRID_X, GRID_Y);
 				
 				if (cells[belowCellIndex].cellType == FLUID) {
-					cell.pressure = -1.0f;
-					cell.tempVelocity = cell.velocity;
+					cell.pressure = -ATMOSPHERIC_PRESSURE;
+					//cell.tempVelocity = cell.velocity;
 					return;
 				}
-			}*/
-            cell.pressure = -1.0f;
-			cell.tempVelocity = cell.velocity;
+			}
+            cell.pressure = ATMOSPHERIC_PRESSURE;
+			//cell.velocity = glm::vec3(0.0);
         }
 	}
 }

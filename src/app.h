@@ -78,6 +78,10 @@ public:
 	int width = 800;
 	int height = 800;
 
+	float fps;
+	float fpstracker;
+	time_t seconds;
+
 	GLFWwindow *window;
 
 	GLuint VAO;
