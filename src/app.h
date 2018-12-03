@@ -81,6 +81,7 @@ public:
 	float fps;
 	float fpstracker;
 	time_t seconds;
+	bool refresh = false;
 
 	GLFWwindow *window;
 

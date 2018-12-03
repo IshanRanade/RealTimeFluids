@@ -153,7 +153,7 @@ __device__ float raySphereIntersect(glm::vec3 rayPos, glm::vec3 rayDir, glm::vec
     return t0;
 }
 
-#if SPHERE_MARCH
+#if SPHERE_MARCH | RAY_CAST
 __device__ float smin(float a, float b, float k) {
     const float h = glm::clamp(0.5f + 0.5f * (b - a) / k, 0.0f, 1.0f);
     return glm::mix(b, a, h) - k * h * (1.0f - h);
@@ -183,7 +183,7 @@ __global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* partic
         // Setup variables
         bool intersected = false;
         glm::vec3 rayPos = camera.position;
-        float tMin = 1000.0f;
+        float tMin = 999999.0f;
         const glm::vec3 view = camera.view;
         const glm::vec3 up = camera.up;
         const glm::vec3 right = camera.right;
@@ -209,15 +209,15 @@ __global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* partic
                     for (int i = 0; i < node.particleCount; ++i) {
                         const int particleId = particleIds[node.particlesOffset + i];
                         const float t = raySphereIntersect(rayPos, rayDir, particles[particleId].worldPosition, PARTICLE_RADIUS);
-                        if (t > 0 && t < tMin) {
-                            intersected = true;
-                            tMin = t;
-                            normal = glm::normalize(rayPos + (rayDir * t) - particles[particleId].worldPosition);
-                        }
+						if (t > 0 && t < tMin) {
+							intersected = true;
+							tMin = t;
+							normal = glm::normalize(rayPos + (rayDir * t) - particles[particleId].worldPosition);
+						}
                     }
                     if (nextOffset == 0) break;
                     currentNode = nodesToVisit[--nextOffset];
-                } else if(node.particleCount == -1) {
+                } else if (node.particleCount == -1) {
                     nodesToVisit[nextOffset++] = node.childOffset[0];
                     nodesToVisit[nextOffset++] = node.childOffset[1];
                     nodesToVisit[nextOffset++] = node.childOffset[2];
@@ -266,6 +266,7 @@ __global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* partic
 #endif
 
         const int index = idx + idy * camera.resolution.x;
+		const glm::vec3 clearColor = glm::vec3(245.0f, 245.0f, 220.0f);
 
         // Set the color
         if (intersected) {
@@ -279,9 +280,11 @@ __global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* partic
             //color = cells[getCellCompressedIndex(rayPos.x, rayPos.y, rayPos.z, GRID_X, GRID_Y)].cellType == FLUID ? color : glm::vec3(0);
 
 #if QUAD_TREE & RAY_CAST
-            const float depth = glm::min((tMax - tMin) * 0.1f, 1.0f);
-            color = depth * color;
+            const float depth = glm::min((tMax - tMin) * 0.2f, 1.0f);
+			color = depth * color + (1.0f - depth) * clearColor;
 #endif
+			//const float fresnel = glm::clamp(1.0f + 1.0f * (1.0f + glm::dot(rayDir, normal)) * 1.0f, 0.0f, 1.0f);
+			//color = fresnel * color + (1.0f - fresnel) * clearColor;
 
             const glm::vec3 lightPos = glm::vec3(2, 1, 0);
             const float specularIntensity = 10.0f;
@@ -289,7 +292,7 @@ __global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* partic
             const glm::vec3 refl = glm::normalize(glm::normalize(camera.position - rayPos) + glm::normalize(lightPos));
             const float specularTerm = glm::pow(glm::max(glm::dot(refl, normal), 0.0f), specularIntensity);
 
-            color = color * (1.0f+specularTerm);
+            color = color * (1.0f + specularTerm);
             pbo[index].x = glm::min(color.x, 255.0f);
             pbo[index].y = glm::min(color.y, 255.0f);
             pbo[index].z = glm::min(color.z, 255.0f);
@@ -297,9 +300,9 @@ __global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* partic
         }
         else {
             // Clear background
-            pbo[index].x = 0.0f;//205.0f;
-            pbo[index].y = 0.0f;//205.0f;
-            pbo[index].z = 0.0f;//240.0f;
+            pbo[index].x = clearColor.x;
+            pbo[index].y = clearColor.y;
+            pbo[index].z = clearColor.z;
             pbo[index].w = 0;
         }
     }
@@ -316,23 +319,27 @@ __global__ void checkParticlesToRender(int* particleIds, MarkerParticle* particl
         const int x = d == 0 ? -1 : d == 1 ? 1 : 0;
         const int y = d == 2 ? -1 : d == 3 ? 1 : 0;
         const int z = d == 4 ? -1 : d == 5 ? 1 : 0;
-        const int cellId = getCellCompressedIndex(cellPos.x + x, cellPos.y + y, cellPos.z + z, GRID_X, GRID_Y);
+	/*for (int x = -1; x < 1; ++x) {
+		for (int y = -1; y < 1; ++y) {
+			for (int z = -1; z < 1; ++z) {*/
+		const int cellId = getCellCompressedIndex(cellPos.x + x, cellPos.y + y, cellPos.z + z, GRID_X, GRID_Y);
 
-        if(inBounds(glm::vec3(0), glm::vec3(GRID_X, GRID_Y, GRID_Z), cellPos + glm::vec3(x, y, z))) {
-            if (cells[cellId].cellType == AIR) {
-                particleIds[index] = index;
-                return;
-            }
-        } else {
-            particleIds[index] = index;
-            return;
-        }
+		if (inBounds(glm::vec3(0), glm::vec3(GRID_X, GRID_Y, GRID_Z), cellPos + glm::vec3(x, y, z))) {
+			if (cells[cellId].cellType == AIR) {
+				particleIds[index] = index;
+				return;
+			}
+		}
+		else {
+			particleIds[index] = index;
+			return;
+		}
     }
     particleIds[index] = -1;
 }
 
 void raycastPBO(uchar4* pbo, Camera camera) {
-#if QUAD_TREE
+#if QUAD_TREE & RAY_CAST
     // Initialize flat 3D quad tree hierarchy
     cudaMemcpy(markerParticles, dev_markerParticles, NUM_MARKER_PARTICLES * sizeof(MarkerParticle), cudaMemcpyDeviceToHost);
     checkParticlesToRender << <BLOCKS_PARTICLES, BLOCK_SIZE >> > (dev_particleIds, dev_markerParticles, dev_gridCells);
@@ -342,7 +349,7 @@ void raycastPBO(uchar4* pbo, Camera camera) {
     std::vector<int> particles;
     for(int i = 0; i < NUM_MARKER_PARTICLES; ++i) {
         if(particleIds[i] != -1)
-            particles.push_back(i);
+			particles.push_back(i);
     }
 
     TreeNode* root = buildTree(particles, markerParticles, 1, glm::vec3(0), glm::vec3(GRID_X, GRID_Y, GRID_Z));
@@ -365,7 +372,7 @@ void raycastPBO(uchar4* pbo, Camera camera) {
 #endif
 
     // Launch ray cast kernel
-    const dim3 BLOCK_SIZE2d(8, 8);
+    const dim3 BLOCK_SIZE2d(16, 16); // TODO: tune block size
     const dim3 blocksPerGrid2d(
         (camera.resolution.x + BLOCK_SIZE2d.x - 1) / BLOCK_SIZE2d.x,
         (camera.resolution.y + BLOCK_SIZE2d.y - 1) / BLOCK_SIZE2d.y);
@@ -419,10 +426,10 @@ void fillVBOsWithMarkerParticles(void *vbo) {
     cudaDeviceSynchronize();
 }
 
-__global__ void generateRandomWorldPositionsForParticles(int n, MarkerParticle *particles) {
+__global__ void generateRandomWorldPositionsForParticles(MarkerParticle *particles) {
     const int index = blockIdx.x * blockDim.x + threadIdx.x;
 
-    if (index < n) {
+    if (index < NUM_MARKER_PARTICLES) {
     /*    MarkerParticle &particle = particles[index];
         particle.worldPosition = getCellUncompressedCoordinates(index / 2, GRID_X, GRID_Y);
         if (index < n / 2)
@@ -1067,7 +1074,7 @@ void initSim() {
     checkCUDAError("malloc marker particles failed");
 
     // Create random world positions for all of the particles
-    generateRandomWorldPositionsForParticles << <BLOCKS_PARTICLES, BLOCK_SIZE >> > (NUM_MARKER_PARTICLES, dev_markerParticles);
+    generateRandomWorldPositionsForParticles << <BLOCKS_PARTICLES, BLOCK_SIZE >> > (dev_markerParticles);
     checkCUDAError("generating initial world positions for marker particles failed");
     cudaDeviceSynchronize();
 
@@ -1082,6 +1089,13 @@ void initSim() {
     colIndA = (int*)malloc(NUM_CELLS * 6 * sizeof(int));
     vecB = (float*)malloc(NUM_CELLS * sizeof(float));
     vecX = (float*)malloc(NUM_CELLS * sizeof(float));
+}
+
+void restartSim() {
+	// Create random world positions for all of the particles
+	generateRandomWorldPositionsForParticles << <BLOCKS_PARTICLES, BLOCK_SIZE >> > (dev_markerParticles);
+	checkCUDAError("generating initial world positions for marker particles failed");
+	cudaDeviceSynchronize();
 }
 
 void freeSim() {

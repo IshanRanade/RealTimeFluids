@@ -12,7 +12,7 @@ App::App() {
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_COMPAT_PROFILE);
-	window = glfwCreateWindow(width, height, "Real Time Fluid Sim", NULL, NULL);
+	window = glfwCreateWindow(width, height, "Real Time Fluids", NULL, NULL);
 	glfwMakeContextCurrent(window);
 
 	initGL();
@@ -139,7 +139,10 @@ void App::start() {
 	seconds = time(NULL);
 
 	while (!glfwWindowShouldClose(window)) {
-		
+		if(refresh) {
+			restartSim();
+			refresh = false;
+		}
 
 		if (camchanged) {
 			camera->update();

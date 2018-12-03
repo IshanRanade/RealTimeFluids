@@ -35,7 +35,7 @@ static struct Grid {
     int sizeX, sizeY, sizeZ, numCells;
 };
 
-#define RAY_CAST 0
+#define RAY_CAST 1
 #define SPHERE_MARCH 0
 #define TIME_STEP (1.0f / 30.0f)
 
@@ -47,7 +47,7 @@ static struct Grid {
 #define CELL_WIDTH 1.0f
 #define WIDTH_DIV_TIME (CELL_WIDTH / TIME_STEP)
 
-#define NUM_MARKER_PARTICLES NUM_CELLS * 2000
+#define NUM_MARKER_PARTICLES NUM_CELLS * 2
 #define PARTICLE_RADIUS 0.1f
 
 #define MAX_VELOCITY 10.0f
@@ -56,9 +56,9 @@ static struct Grid {
 #define FLUID_DENSITY 100.0f
 #define AIR_DENSITY 1.0f
 #define ATMOSPHERIC_PRESSURE 50.0f
-#define GAUSS_ITERATIONS 16
+#define GAUSS_ITERATIONS 3
 
-#define BLOCK_SIZE 256
+#define BLOCK_SIZE 128
 #define BLOCKS_PARTICLES ((NUM_MARKER_PARTICLES + BLOCK_SIZE - 1) / BLOCK_SIZE)
 #define BLOCKS_CELLS ((NUM_CELLS + BLOCK_SIZE - 1) / BLOCK_SIZE)
 
@@ -74,6 +74,7 @@ static int MAX_GRID_LEVEL;
 
 void initSim();
 void freeSim();
+void restartSim();
 void iterateSim();
 void fillVBOsWithMarkerParticles(void *vbo);
 void raycastPBO(uchar4* pbo, Camera camera);

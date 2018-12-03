@@ -40,8 +40,8 @@ TreeNode* buildTree(std::vector<int>& oldParticles, MarkerParticle* markerPartic
     } else {
         bounds.min.y = yMin;
         bounds.max.y = yMax;
-        bounds.min -= glm::vec3(PARTICLE_RADIUS * 2.0f);
-        bounds.max += glm::vec3(PARTICLE_RADIUS * 2.0f);
+        bounds.min -= glm::vec3(PARTICLE_RADIUS * 4.0f);
+        bounds.max += glm::vec3(PARTICLE_RADIUS * 4.0f);
     }
     node->bounds = bounds;
 
@@ -50,6 +50,7 @@ TreeNode* buildTree(std::vector<int>& oldParticles, MarkerParticle* markerPartic
 
     // Build child nodes
     const glm::vec3 center = bounds.min + ((bounds.max - bounds.min) / 2.0f);
+	//node->children.push_back(buildTree(particles, markerParticles, currentDepth + 1, glm::vec3(0), glm::vec3(0)));
     node->children.push_back(buildTree(particles, markerParticles, currentDepth + 1, bounds.min, glm::vec3(center.x, bounds.max.y, center.z))); // LL
     node->children.push_back(buildTree(particles, markerParticles, currentDepth + 1, glm::vec3(center.x, bounds.min.y, center.z), bounds.max)); // UR
     node->children.push_back(buildTree(particles, markerParticles, currentDepth + 1, glm::vec3(bounds.min.x, bounds.min.y, center.z), glm::vec3(center.x, bounds.max.y, bounds.max.z))); // UL
