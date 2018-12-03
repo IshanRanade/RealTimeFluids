@@ -289,7 +289,7 @@ __global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* partic
             const glm::vec3 refl = glm::normalize(glm::normalize(camera.position - rayPos) + glm::normalize(lightPos));
             const float specularTerm = glm::pow(glm::max(glm::dot(refl, normal), 0.0f), specularIntensity);
 
-            color = color * (depth + specularTerm);
+            color = color * (specularTerm);
             pbo[index].x = glm::min(color.x, 255.0f);
             pbo[index].y = glm::min(color.y, 255.0f);
             pbo[index].z = glm::min(color.z, 255.0f);
@@ -548,7 +548,7 @@ __global__ void backwardsParticleTrace(int n, GridCell* cells) {
         // For now just use simple Euler
         const glm::vec3 cellPosition = (getCellUncompressedCoordinates(index, GRID_X, GRID_Y) * CELL_WIDTH) + glm::vec3(CELL_WIDTH / 2.0, CELL_WIDTH / 2.0, CELL_WIDTH / 2.0);
         
-		const glm::vec3 rungeKuttaPosition = cellPosition + (TIME_STEP / 2.0f) * cell.velocity;
+		const glm::vec3 rungeKuttaPosition = cellPosition - (TIME_STEP / 2.0f) * cell.velocity;
 
 		glm::vec3 interpolatedVelocity = getInterpolatedVelocity(getCellCompressedIndex(rungeKuttaPosition.x, rungeKuttaPosition.y, rungeKuttaPosition.z, GRID_X, GRID_Y), rungeKuttaPosition, cells);
 
