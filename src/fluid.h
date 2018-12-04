@@ -43,7 +43,7 @@ static struct Grid {
     int sizeX, sizeY, sizeZ, numCells;
 };
 
-#define RAY_CAST 0
+#define RAY_CAST 1
 #define BLINN_PHONG 0
 #define TIME_STEP (1.0f / 30.0f)
 
@@ -71,7 +71,7 @@ static struct Grid {
 #define BLOCKS_CELLS ((NUM_CELLS + BLOCK_SIZE - 1) / BLOCK_SIZE)
 
 static GridCellData cellData;
-static GridCell* dev_gridCells;
+//static GridCell* dev_gridCells;
 static MarkerParticle* dev_markerParticles;
 static MarkerParticle* markerParticles;
 

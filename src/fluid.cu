@@ -1069,8 +1069,12 @@ void restartSim() {
 }
 
 void freeSim() {
+	cudaFree(cellData.cellType);
+	cudaFree(cellData.layer);
+	cudaFree(cellData.velocity);
+	cudaFree(cellData.tempVelocity);
+	cudaFree(cellData.pressure);
     cudaFree(dev_markerParticles);
-    cudaFree(dev_gridCells);
     cudaFree(dev_flatTree);
     cudaFree(dev_particleIds);
 	free(markerParticles);
@@ -1140,15 +1144,6 @@ void iterateSim() {
         cudaMemcpy(vecB, grids[0].dev_B, NUM_CELLS * sizeof(float), cudaMemcpyDeviceToHost);
         gaussSeidelPressureCPU(NUM_CELLS, valA, colIndA, vecX, vecB);
         cudaMemcpy(grids[0].dev_X, vecX, NUM_CELLS * sizeof(float), cudaMemcpyHostToDevice);
-
-
- /*       gaussSeidelPressure << <GAUSS_SEIDEL_BLOCKS, BLOCK_SIZE >> > (grids[0],0);
-        checkCUDAError("gauss seidel iteration failed");
-        cudaDeviceSynchronize();*/
-
-		//gaussSeidelPressure << <blocksPerGrid2d, BLOCK_SIZE2d >> > (grids[0], 1);
-		//checkCUDAError("gauss seidel iteration failed");
-		//cudaDeviceSynchronize();
     }
 
     // Copy pressure to cells
