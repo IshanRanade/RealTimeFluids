@@ -9,6 +9,14 @@ static enum CellType {
 	AIR
 };
 
+static struct GridCellData {
+	int* dev_layer;
+	CellType* dev_cellType;
+	float* dev_pressure;
+	glm::vec3* dev_velocity;
+	glm::vec3* dev_tempVelocity;
+
+};
 static struct GridCell {
 	int layer;
 	CellType cellType;
@@ -35,7 +43,7 @@ static struct Grid {
     int sizeX, sizeY, sizeZ, numCells;
 };
 
-#define RAY_CAST 1
+#define RAY_CAST 0
 #define BLINN_PHONG 0
 #define TIME_STEP (1.0f / 30.0f)
 
@@ -48,7 +56,7 @@ static struct Grid {
 #define WIDTH_DIV_TIME (CELL_WIDTH / TIME_STEP)
 
 #define NUM_MARKER_PARTICLES NUM_CELLS * (RAY_CAST ? 4 : 1250)
-#define PARTICLE_RADIUS 1.0f
+#define PARTICLE_RADIUS (RAY_CAST ? 0.9f : 0.1f)
 
 #define MAX_VELOCITY 10.0f
 #define GRAVITY 9.8f
@@ -62,6 +70,7 @@ static struct Grid {
 #define BLOCKS_PARTICLES ((NUM_MARKER_PARTICLES + BLOCK_SIZE - 1) / BLOCK_SIZE)
 #define BLOCKS_CELLS ((NUM_CELLS + BLOCK_SIZE - 1) / BLOCK_SIZE)
 
+static GridCellData cellData;
 static GridCell* dev_gridCells;
 static MarkerParticle* dev_markerParticles;
 static MarkerParticle* markerParticles;
