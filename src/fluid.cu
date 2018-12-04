@@ -602,16 +602,23 @@ __global__ void moveMarkerParticlesThroughField(int n, GridCell *cells, MarkerPa
 
         // Find the cell that this particle is in
         int cellIndex = getCellCompressedIndex(particle.worldPosition.x, particle.worldPosition.y, particle.worldPosition.z, GRID_X, GRID_Y);
-
-		glm::vec3 cellCoords = getCellUncompressedCoordinates(cellIndex, GRID_X, GRID_Y);
-		glm::vec3 cellCenter = cellCoords + glm::vec3(0.5, 0.5, 0.5);
         
 		glm::vec3 interpolatedVelocity = getInterpolatedVelocity(cellIndex, particle.worldPosition, cells);
-	
-        particle.worldPosition += TIME_STEP * interpolatedVelocity;
-        particle.worldPosition.x = glm::clamp(particle.worldPosition.x, 0.01f, GRID_X * CELL_WIDTH - 0.01f);
-        particle.worldPosition.y = glm::clamp(particle.worldPosition.y, 0.01f, GRID_Y * CELL_WIDTH - 0.01f);
-        particle.worldPosition.z = glm::clamp(particle.worldPosition.z, 0.01f, GRID_Z * CELL_WIDTH - 0.01f);
+
+		glm::vec3 rungeKuttaPosition = particle.worldPosition + (TIME_STEP / 2.0f) * interpolatedVelocity;
+
+		glm::vec3 newVelocity;
+		if (rungeKuttaPosition.x < 0 || rungeKuttaPosition.x >= GRID_X || rungeKuttaPosition.y < 0 || rungeKuttaPosition.y >= GRID_Y || rungeKuttaPosition.z < 0 || rungeKuttaPosition.z >= GRID_Z) {
+			newVelocity = interpolatedVelocity;
+		}
+		else {
+			newVelocity = getInterpolatedVelocity(getCellCompressedIndex(rungeKuttaPosition.x, rungeKuttaPosition.y, rungeKuttaPosition.z, GRID_X, GRID_Y), rungeKuttaPosition, cells);
+		}
+
+        particle.worldPosition += TIME_STEP * newVelocity;
+        particle.worldPosition.x = glm::clamp(particle.worldPosition.x, 0.501f, GRID_X * CELL_WIDTH - 0.501f);
+        particle.worldPosition.y = glm::clamp(particle.worldPosition.y, 0.501f, GRID_Y * CELL_WIDTH - 0.501f);
+        particle.worldPosition.z = glm::clamp(particle.worldPosition.z, 0.501f, GRID_Z * CELL_WIDTH - 0.501f);
     }
 }
 
@@ -1069,7 +1076,6 @@ void initSim() {
     checkCUDAError("init hierarchical pressure grids failed");
 
     // Allocate space for all of the marker particles
-    markerParticles = (MarkerParticle*)malloc(NUM_MARKER_PARTICLES * sizeof(MarkerParticle));
     cudaMalloc(&dev_markerParticles, NUM_MARKER_PARTICLES * sizeof(MarkerParticle));
     checkCUDAError("malloc marker particles failed");
 
@@ -1091,10 +1097,26 @@ void initSim() {
     vecX = (float*)malloc(NUM_CELLS * sizeof(float));
 }
 
+__global__ void resetGridCells(int numCells, GridCell *cells) {
+	const int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+	if (index < numCells) {
+		GridCell &cell = cells[index];
+
+		cell.velocity = glm::vec3(0);
+		cell.tempVelocity = glm::vec3(0);
+	}
+}
+
 void restartSim() {
 	// Create random world positions for all of the particles
 	generateRandomWorldPositionsForParticles << <BLOCKS_PARTICLES, BLOCK_SIZE >> > (dev_markerParticles);
 	checkCUDAError("generating initial world positions for marker particles failed");
+	cudaDeviceSynchronize();
+
+	// Reset the velocities of the grid cells to 0
+	resetGridCells << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
+	checkCUDAError("resetting the grid cells failed");
 	cudaDeviceSynchronize();
 }
 
@@ -1104,7 +1126,6 @@ void freeSim() {
     cudaFree(dev_flatTree);
     cudaFree(dev_particleIds);
     free(particleIds);
-    free(markerParticles);
     free(vecB);
     free(vecX);
     free(valA);
@@ -1162,8 +1183,6 @@ void iterateSim() {
     checkCUDAError("setup pressure calc failed");
     cudaDeviceSynchronize();
 
-	//const int GAUSS_SEIDEL_BLOCKS = (NUM_CELLS * NUM_CELLS + BLOCK_SIZE - 1) / BLOCK_SIZE;
-
     // Gauss Seidel Pressure Solver
     for (int i = 0; i < GAUSS_ITERATIONS; ++i) {
         memset(vecX, 0.0f, NUM_CELLS * sizeof(float));
@@ -1188,12 +1207,6 @@ void iterateSim() {
     checkCUDAError("copy pressure to cells failed");
     cudaDeviceSynchronize();
 
-
-	// Set the velocities and pressure of air cells
-	setAirCellPressureAndVelocity << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
-	checkCUDAError("setting air cell pressure and velocity failed");
-	cudaDeviceSynchronize();
-
     // Apply pressure
     applyPressure << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
     checkCUDAError("applying pressure to cell velocities failed");
@@ -1205,7 +1218,7 @@ void iterateSim() {
 
 
 	// Extrapolate fluid velocities into surrounding cells
-	for (int i = 1; i < 10; i++) {
+	for (int i = 1; i < 5; i++) {
 		extrapolateFluidVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells, i);
 		checkCUDAError("extrapolating velocities failed");
 		cudaDeviceSynchronize();
@@ -1215,17 +1228,10 @@ void iterateSim() {
 		cudaDeviceSynchronize();
 	}
 	
-
+	// Set velocity of cells pointing to solids
 	setVelocitiesIntoSolidsAsZero << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
 	checkCUDAError("setting velocities into solids as zero failed");
 	cudaDeviceSynchronize();
-
-    // Set the velocities of surrounding cells
-
-	// Clamp cell velocities
-	//clampCellVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells);
-	//checkCUDAError("clamping cell velocities failed");
-	//cudaDeviceSynchronize();
 
     // Move the marker particles through the velocity field
     moveMarkerParticlesThroughField << <BLOCKS_PARTICLES, BLOCK_SIZE >> > (NUM_MARKER_PARTICLES, dev_gridCells, dev_markerParticles);
