@@ -153,7 +153,7 @@ __device__ float raySphereIntersect(glm::vec3 rayPos, glm::vec3 rayDir, glm::vec
     return t0;
 }
 
-#if SPHERE_MARCH | RAY_CAST
+#if 0
 __device__ float smin(float a, float b, float k) {
     const float h = glm::clamp(0.5f + 0.5f * (b - a) / k, 0.0f, 1.0f);
     return glm::mix(b, a, h) - k * h * (1.0f - h);
@@ -189,18 +189,18 @@ __global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* partic
         const glm::vec3 right = camera.right;
         glm::vec3 normal = glm::vec3(0, 1, 0);
         
-        glm::vec3 rayDir = glm::normalize(view
+        const glm::vec3 rayDir = glm::normalize(view
             - right * camera.pixelLength.x * ((float)idx - camera.resolution.x * 0.5f)
             - up * camera.pixelLength.y * ((float)idy - camera.resolution.y * 0.5f)
         );
 
-#if RAY_CAST
 #if QUAD_TREE
         // Quad tree traversal
         int nextOffset = 0;
         int currentNode = 0;
-        int nodesToVisit[32];
+        int nodesToVisit[64];
         const float tMax = boundsIntersectionTest(tree[0].bounds, rayPos, rayDir, false);
+
         while(true) {
             LinearNode& node = tree[currentNode];
             const float boundsT = boundsIntersectionTest(node.bounds, rayPos, rayDir);
@@ -211,8 +211,8 @@ __global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* partic
                         const float t = raySphereIntersect(rayPos, rayDir, particles[particleId].worldPosition, PARTICLE_RADIUS);
 						if (t > 0 && t < tMin) {
 							intersected = true;
+                            normal = glm::normalize(rayPos + (rayDir * t) - particles[particleId].worldPosition);
 							tMin = t;
-							normal = glm::normalize(rayPos + (rayDir * t) - particles[particleId].worldPosition);
 						}
                     }
                     if (nextOffset == 0) break;
@@ -242,36 +242,14 @@ __global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* partic
         }
 #endif
         rayPos += rayDir * tMin;
-
-#elif SPHERE_MARCH
-        int iterations = 0;
-        const int maxIterations = 16;
-        const float radius = 1.25f;
-
-        // Sphere march for smoothed min marker particle
-        while (tMin > radius && iterations < maxIterations) {
-            for (int i = 0; i < numParticles; ++i) {
-                MarkerParticle& particle = particles[i];
-                //distance = glm::min(distance, glm::distance(rayPos, particle.worldPosition));
-                tMin = smin(tMin, glm::distance(rayPos, particle.worldPosition), PARTICLE_RADIUS);
-                if (distance < radius) {
-                    normal = glm::normalize(rayPos - particle.worldPosition);
-                    break;
-                }
-            }
-            rayPos += rayDir * tMin;
-            ++iterations;
-        }
-        intersected = tMin < radius;
-#endif
-
+        
         const int index = idx + idy * camera.resolution.x;
 		const glm::vec3 clearColor = glm::vec3(245.0f, 245.0f, 220.0f);
 
         // Set the color
         if (intersected) {
             // Ray hit a marker particle
-            glm::vec3 color = glm::vec3(50.f, 50.f, 240.f);
+            glm::vec3 color = glm::vec3(50.f, 60.f, 240.f);
 
             // Debug velocity color
             //color = glm::abs(cells[getCellCompressedIndex(rayPos.x, rayPos.y, rayPos.z, GRID_X, GRID_Y)].velocity) * 40.0f;
@@ -279,20 +257,23 @@ __global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* partic
             // Debug cell type color
             //color = cells[getCellCompressedIndex(rayPos.x, rayPos.y, rayPos.z, GRID_X, GRID_Y)].cellType == FLUID ? color : glm::vec3(0);
 
-#if QUAD_TREE & RAY_CAST
-            const float depth = glm::min((tMax - tMin) * 0.2f, 1.0f);
-			color = depth * color + (1.0f - depth) * clearColor;
-#endif
-			//const float fresnel = glm::clamp(1.0f + 1.0f * (1.0f + glm::dot(rayDir, normal)) * 1.0f, 0.0f, 1.0f);
-			//color = fresnel * color + (1.0f - fresnel) * clearColor;
-
+            //float fresnel = glm::clamp(1.0f - glm::dot(normal, -rayPos), 0.0f, 1.0f);
+            //fresnel = glm::pow(fresnel, 3.0f) * 0.65f;
+            //color = fresnel * color + (1.0f - fresnel) * clearColor;
+            
             const glm::vec3 lightPos = glm::vec3(2, 1, 0);
-            const float specularIntensity = 10.0f;
+            const float specularIntensity = 15.0f;
 
             const glm::vec3 refl = glm::normalize(glm::normalize(camera.position - rayPos) + glm::normalize(lightPos));
             const float specularTerm = glm::pow(glm::max(glm::dot(refl, normal), 0.0f), specularIntensity);
 
             color = color * (1.0f + specularTerm);
+
+#if QUAD_TREE
+            const float depth = glm::min((tMax - tMin) * 0.2f, 1.0f);
+            color = depth * color + (1.0f - depth) * clearColor;
+#endif
+
             pbo[index].x = glm::min(color.x, 255.0f);
             pbo[index].y = glm::min(color.y, 255.0f);
             pbo[index].z = glm::min(color.z, 255.0f);
