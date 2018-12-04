@@ -10,11 +10,11 @@ static enum CellType {
 };
 
 static struct GridCellData {
-	int* dev_layer;
-	CellType* dev_cellType;
-	float* dev_pressure;
-	glm::vec3* dev_velocity;
-	glm::vec3* dev_tempVelocity;
+	int* layer;
+	CellType* cellType;
+	float* pressure;
+	glm::vec3* velocity;
+	glm::vec3* tempVelocity;
 
 };
 static struct GridCell {
