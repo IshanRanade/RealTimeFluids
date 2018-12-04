@@ -42,8 +42,8 @@ TreeNode* buildTree(std::vector<int>& oldParticles, MarkerParticle* markerPartic
     } else {
         bounds.min.y = yMin;
         bounds.max.y = yMax;
-        bounds.min -= glm::vec3(PARTICLE_RADIUS * 4.0f);
-        bounds.max += glm::vec3(PARTICLE_RADIUS * 4.0f);
+        bounds.min -= glm::vec3(PARTICLE_RADIUS);
+        bounds.max += glm::vec3(PARTICLE_RADIUS);
     }
     node->bounds = bounds;
 

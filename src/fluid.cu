@@ -260,14 +260,17 @@ __global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* partic
             //float fresnel = glm::clamp(1.0f - glm::dot(normal, -rayPos), 0.0f, 1.0f);
             //fresnel = glm::pow(fresnel, 3.0f) * 0.65f;
             //color = fresnel * color + (1.0f - fresnel) * clearColor;
-            
+
+#if BLINN_PHONG
+			normal = glm::vec3(normal.x, normal.y, normal.z);
             const glm::vec3 lightPos = glm::vec3(2, 1, 0);
-            const float specularIntensity = 15.0f;
+            const float specularIntensity = 20.0f;
 
             const glm::vec3 refl = glm::normalize(glm::normalize(camera.position - rayPos) + glm::normalize(lightPos));
             const float specularTerm = glm::pow(glm::max(glm::dot(refl, normal), 0.0f), specularIntensity);
 
             color = color * (1.0f + specularTerm);
+#endif
 
 #if QUAD_TREE
             const float depth = glm::min((tMax - tMin) * 0.2f, 1.0f);
@@ -320,7 +323,7 @@ __global__ void checkParticlesToRender(int* particleIds, MarkerParticle* particl
 }
 
 void raycastPBO(uchar4* pbo, Camera camera) {
-#if QUAD_TREE & RAY_CAST
+#if QUAD_TREE
     // Initialize flat 3D quad tree hierarchy
     cudaMemcpy(markerParticles, dev_markerParticles, NUM_MARKER_PARTICLES * sizeof(MarkerParticle), cudaMemcpyDeviceToHost);
     checkParticlesToRender << <BLOCKS_PARTICLES, BLOCK_SIZE >> > (dev_particleIds, dev_markerParticles, dev_gridCells);
@@ -1057,6 +1060,7 @@ void initSim() {
     checkCUDAError("init hierarchical pressure grids failed");
 
     // Allocate space for all of the marker particles
+	markerParticles = (MarkerParticle*)malloc(NUM_MARKER_PARTICLES * sizeof(MarkerParticle));
     cudaMalloc(&dev_markerParticles, NUM_MARKER_PARTICLES * sizeof(MarkerParticle));
     checkCUDAError("malloc marker particles failed");
 
@@ -1106,6 +1110,7 @@ void freeSim() {
     cudaFree(dev_gridCells);
     cudaFree(dev_flatTree);
     cudaFree(dev_particleIds);
+	free(markerParticles);
     free(particleIds);
     free(vecB);
     free(vecX);
