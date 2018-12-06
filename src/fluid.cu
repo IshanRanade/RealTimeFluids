@@ -545,12 +545,13 @@ __global__ void backwardsParticleTrace(int n, GridCell* cells) {
         
 		const glm::vec3 rungeKuttaPosition = cellPosition - (TIME_STEP / 2.0f) * cell.velocity;
 
+		glm::vec3 interpolatedVelocity;
 		if (rungeKuttaPosition.x < 0 || rungeKuttaPosition.x >= GRID_X || rungeKuttaPosition.y < 0 || rungeKuttaPosition.y >= GRID_Y || rungeKuttaPosition.z < 0 || rungeKuttaPosition.z >= GRID_Z) {
-			return;
+			interpolatedVelocity = cell.velocity;
 		}
-
-		glm::vec3 interpolatedVelocity = getInterpolatedVelocity(getCellCompressedIndex(rungeKuttaPosition.x, rungeKuttaPosition.y, rungeKuttaPosition.z, GRID_X, GRID_Y), rungeKuttaPosition, cells);
-
+		else {
+			interpolatedVelocity = getInterpolatedVelocity(getCellCompressedIndex(rungeKuttaPosition.x, rungeKuttaPosition.y, rungeKuttaPosition.z, GRID_X, GRID_Y), rungeKuttaPosition, cells);
+		}
 
 		const glm::vec3 oldPosition = cellPosition - TIME_STEP * interpolatedVelocity;
 
@@ -724,12 +725,12 @@ __global__ void setupPressureCalc(Grid grid, GridCell* cells) {
     if (index >= grid.numCells)
         return;
 
-	if (cells[index].cellType == AIR)
-		return;
+	//if (cells[index].cellType == AIR)
+	//	return;
 
     const glm::vec3 cellPos = getCellUncompressedCoordinates(index, grid.sizeX, grid.sizeY);
 
-    int nonSolid = -6;
+    float nonSolid = 1.0f;
     float airCells = 0.0f;
     for (int i = 0; i < 6; ++i) {
         const int x = i == 0 ? -1 : i == 1 ? 1 : 0;
@@ -739,18 +740,20 @@ __global__ void setupPressureCalc(Grid grid, GridCell* cells) {
         // Special case for bounds adjacent
         if (cellPos.x + x < 0 || cellPos.x + x >= grid.sizeX || cellPos.y + y < 0 || cellPos.y + y >= grid.sizeY || cellPos.z + z < 0 || cellPos.z + z >= grid.sizeZ) {
             grid.dev_colIndA[index * 6 + i] = -1;
-            ++nonSolid;
             continue;
         }
+
+	
 
 
 		const int adjacent = getCellCompressedIndex(cellPos.x + x, cellPos.y + y, cellPos.z + z, grid.sizeX, grid.sizeY);
         GridCell& adjacentCell = cells[adjacent];
 
+		++nonSolid;
+
 		if (adjacentCell.cellType == AIR) {
 			grid.dev_colIndA[index * 6 + i] = -1;
-			//++nonSolid;
-			airCells += 1.0f;
+			++airCells;
 			continue;
 			
 		}
@@ -762,7 +765,10 @@ __global__ void setupPressureCalc(Grid grid, GridCell* cells) {
         grid.dev_valA[index * 7 + i + 1] = 1.0f;
     }
     // Set matrix value for current grid cell
-    grid.dev_valA[index * 7] = nonSolid;
+	if (nonSolid == 0) {
+		printf("here");
+	}
+    grid.dev_valA[index * 7] = -nonSolid;
 
     // Set value of b vector for pressure solver
     float divU = 0.0f;
@@ -805,11 +811,11 @@ __global__ void setupPressureCalc(Grid grid, GridCell* cells) {
     divU += (divPlus - divMinus);
     divU /= CELL_WIDTH;
 
-    grid.dev_B[index] = divU * (cell.cellType == FLUID ? FLUID_DENSITY : AIR_DENSITY) / (TIME_STEP) - ATMOSPHERIC_PRESSURE * airCells;
+	grid.dev_B[index] = divU * (cell.cellType == FLUID ? FLUID_DENSITY : AIR_DENSITY) / (TIME_STEP) - ATMOSPHERIC_PRESSURE * airCells;
 	
-	if (cell.cellType == AIR) {
-		grid.dev_B[index] = 0.0f;
-	}
+	//if (cell.cellType == AIR) {
+	//	grid.dev_B[index] = 0.0f;
+	//}
 }
 
 __global__ void gaussSeidelPressure(Grid grid, int redBlack) {
@@ -1148,7 +1154,7 @@ void iterateSim() {
     checkCUDAError("marking all cells with a marker particle as fluid cells failed");
     cudaDeviceSynchronize();
 
- //   // Apply convection to velocities using a backwards particle trace
+    // Apply convection to velocities using a backwards particle trace
     backwardsParticleTrace<<<BLOCKS_CELLS, BLOCK_SIZE>>>(NUM_CELLS, dev_gridCells);
     checkCUDAError("convecting velocities using a backwards particle trace failed");
     cudaDeviceSynchronize();
