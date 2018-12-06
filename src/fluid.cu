@@ -1,5 +1,6 @@
 #include "fluid.h"
 #include "hierarchy.h"
+#include "lodepng.h"
 
 #include <cuda_runtime.h>
 #include <cuda.h>
@@ -175,7 +176,7 @@ __device__ bool inBounds(const glm::vec3 min, const glm::vec3 max, const glm::ve
         pos.z >= min.z && pos.z <= max.z);
 }
 
-__global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* particles, Camera camera, GridCell* cells, LinearNode* tree, int* particleIds) {
+__global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* particles, Camera camera, LinearNode* tree, int* particleIds, unsigned char* waterTex) {
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
     const int idy = blockIdx.y * blockDim.y + threadIdx.y;
 
@@ -198,8 +199,7 @@ __global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* partic
         // Quad tree traversal
         int nextOffset = 0;
         int currentNode = 0;
-        int nodesToVisit[64];
-        const float tMax = boundsIntersectionTest(tree[0].bounds, rayPos, rayDir, false);
+        int nodesToVisit[32];
 
         while(true) {
             LinearNode& node = tree[currentNode];
@@ -208,7 +208,7 @@ __global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* partic
                 if(node.particleCount > 0) {
                     for (int i = 0; i < node.particleCount; ++i) {
                         const int particleId = particleIds[node.particlesOffset + i];
-                        const float t = raySphereIntersect(rayPos, rayDir, particles[particleId].worldPosition, PARTICLE_RADIUS);
+                        const float t = raySphereIntersect(rayPos, rayDir, particles[particleId].worldPosition, PARTICLE_RADIUS_SQUARE);
 						if (t > 0 && t < tMin) {
 							intersected = true;
                             normal = glm::normalize(rayPos + (rayDir * t) - particles[particleId].worldPosition);
@@ -249,30 +249,33 @@ __global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* partic
         // Set the color
         if (intersected) {
             // Ray hit a marker particle
-            glm::vec3 color = glm::vec3(50.f, 60.f, 240.f);
+            glm::vec3 color = glm::vec3(0, 133.f, 164.f);
+			float height = (rayPos.y / GRID_Y);
+			color =  height * color + (1.f - height) * glm::vec3(0, 60.f, 81.f);
 
             // Debug velocity color
             //color = glm::abs(cells[getCellCompressedIndex(rayPos.x, rayPos.y, rayPos.z, GRID_X, GRID_Y)].velocity) * 40.0f;
-
-            // Debug cell type color
-            //color = cells[getCellCompressedIndex(rayPos.x, rayPos.y, rayPos.z, GRID_X, GRID_Y)].cellType == FLUID ? color : glm::vec3(0);
 
             //float fresnel = glm::clamp(1.0f - glm::dot(normal, -rayPos), 0.0f, 1.0f);
             //fresnel = glm::pow(fresnel, 3.0f) * 0.65f;
             //color = fresnel * color + (1.0f - fresnel) * clearColor;
 
 #if BLINN_PHONG
-			normal = glm::vec3(normal.x, normal.y, normal.z);
+			const int normalX = (rayPos.x * (512.0f / GRID_X));
+			const int normalZ = (rayPos.z * rayPos.y * (512.0f / GRID_Z / GRID_Y));
+			const int normalId = 3 * (normalX + 512 * normalZ);
+			normal = glm::normalize(glm::vec3(waterTex[normalId], waterTex[normalId + 2], waterTex[normalId + 1]));
             const glm::vec3 lightPos = glm::vec3(2, 1, 0);
-            const float specularIntensity = 20.0f;
+            const float roughness = 10.0f;
 
             const glm::vec3 refl = glm::normalize(glm::normalize(camera.position - rayPos) + glm::normalize(lightPos));
-            const float specularTerm = glm::pow(glm::max(glm::dot(refl, normal), 0.0f), specularIntensity);
+            const float specularTerm = glm::pow(glm::max(glm::dot(refl, normal), 0.0f), roughness);
 
             color = color * (1.0f + specularTerm);
 #endif
 
 #if QUAD_TREE
+			const float tMax = boundsIntersectionTest(tree[0].bounds, camera.position, rayDir, false);
             const float depth = glm::min((tMax - tMin) * 0.2f, 1.0f);
             color = depth * color + (1.0f - depth) * clearColor;
 #endif
@@ -326,13 +329,13 @@ void raycastPBO(uchar4* pbo, Camera camera) {
 #if QUAD_TREE
     // Initialize flat 3D quad tree hierarchy
     cudaMemcpy(markerParticles, dev_markerParticles, NUM_MARKER_PARTICLES * sizeof(MarkerParticle), cudaMemcpyDeviceToHost);
-    checkParticlesToRender << <BLOCKS_PARTICLES, BLOCK_SIZE >> > (dev_particleIds, dev_markerParticles, dev_gridCells);
-    cudaMemcpy(particleIds, dev_particleIds, NUM_MARKER_PARTICLES * sizeof(int), cudaMemcpyDeviceToHost);
+    //checkParticlesToRender << <BLOCKS_PARTICLES, BLOCK_SIZE >> > (dev_particleIds, dev_markerParticles, dev_gridCells);
+    //cudaMemcpy(particleIds, dev_particleIds, NUM_MARKER_PARTICLES * sizeof(int), cudaMemcpyDeviceToHost);
     checkCUDAError("copy marker particles to cpu failed");
 
     std::vector<int> particles;
     for(int i = 0; i < NUM_MARKER_PARTICLES; ++i) {
-        if(particleIds[i] != -1)
+        //if(particleIds[i] != -1)
 			particles.push_back(i);
     }
 
@@ -360,7 +363,7 @@ void raycastPBO(uchar4* pbo, Camera camera) {
     const dim3 blocksPerGrid2d(
         (camera.resolution.x + BLOCK_SIZE2d.x - 1) / BLOCK_SIZE2d.x,
         (camera.resolution.y + BLOCK_SIZE2d.y - 1) / BLOCK_SIZE2d.y);
-    raycastPBO << <blocksPerGrid2d, BLOCK_SIZE2d >> > (NUM_MARKER_PARTICLES, pbo, dev_markerParticles, camera, dev_gridCells, dev_flatTree, dev_particleIds);
+    raycastPBO << <blocksPerGrid2d, BLOCK_SIZE2d >> > (NUM_MARKER_PARTICLES, pbo, dev_markerParticles, camera, dev_flatTree, dev_particleIds, dev_waterTexture);
     checkCUDAError("raymarch to form PBO failed");
     cudaDeviceSynchronize();
 }
@@ -404,8 +407,7 @@ __global__ void setGridCellsWithMarkerParticleToFluid(int n, GridCell* cells, Ma
 }
 
 void fillVBOsWithMarkerParticles(void *vbo) {
-    const int blocks = (NUM_MARKER_PARTICLES + BLOCK_SIZE - 1) / BLOCK_SIZE;
-    fillVBOData << <blocks, BLOCK_SIZE >> > (NUM_MARKER_PARTICLES, vbo, dev_markerParticles, dev_gridCells);
+    fillVBOData << <BLOCKS_PARTICLES, BLOCK_SIZE >> > (NUM_MARKER_PARTICLES, vbo, dev_markerParticles, dev_gridCells);
     checkCUDAError("filling VBOs with marker particle data failed");
     cudaDeviceSynchronize();
 }
@@ -1074,6 +1076,16 @@ void initSim() {
     cudaMalloc(&dev_particleIds, sizeof(int) * NUM_MARKER_PARTICLES);
     checkCUDAError("allocating space for flat tree failed");
     cudaDeviceSynchronize();
+
+	// Read water normal texture
+	std::vector<unsigned char> image;
+	unsigned width, height;
+	unsigned error = lodepng::decode(image, width, height, "../img/water_normal.png", LCT_RGB);
+	if (error) std::cout << "decoder error " << error << ": " << lodepng_error_text(error) << std::endl;
+	else {
+		cudaMalloc(&dev_waterTexture, sizeof(unsigned char) * width * height * 3);
+		cudaMemcpy(dev_waterTexture, image.data(), sizeof(unsigned char) * image.size(), cudaMemcpyHostToDevice);
+	}
 
     particleIds = (int*)malloc(NUM_MARKER_PARTICLES * sizeof(int));
     valA = (float*)malloc(NUM_CELLS * 7 * sizeof(float));

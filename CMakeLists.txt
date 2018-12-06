@@ -91,6 +91,8 @@ cuda_add_library(src
 	"src/shaders/basic.frag.glsl"
 	"src/hierarchy.cpp"
 	"src/hierarchy.h"
+	"src/lodepng.h"
+	"src/lodepng.cpp"
     OPTIONS -arch=sm_60
     )
 

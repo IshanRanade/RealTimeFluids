@@ -35,20 +35,21 @@ static struct Grid {
     int sizeX, sizeY, sizeZ, numCells;
 };
 
-#define RAY_CAST 0
-#define BLINN_PHONG 0
+#define RAY_CAST 1
+#define BLINN_PHONG 1
 #define TIME_STEP (1.0f / 30.0f)
 
-#define GRID_X 64
-#define GRID_Y 64
-#define GRID_Z 64
+#define GRID_X 32
+#define GRID_Y 32
+#define GRID_Z 32
 
 #define NUM_CELLS (GRID_X * GRID_Y * GRID_Z)
 #define CELL_WIDTH 1.0f
 #define WIDTH_DIV_TIME (CELL_WIDTH / TIME_STEP)
 
-#define NUM_MARKER_PARTICLES 800000
-#define PARTICLE_RADIUS 0.1f
+#define NUM_MARKER_PARTICLES (NUM_CELLS / 2)
+#define PARTICLE_RADIUS 0.7f
+#define PARTICLE_RADIUS_SQUARE (PARTICLE_RADIUS * PARTICLE_RADIUS)
 
 #define MAX_VELOCITY 10.0f
 #define GRAVITY 9.8f
@@ -56,7 +57,7 @@ static struct Grid {
 #define FLUID_DENSITY 100.2f
 #define AIR_DENSITY 1.225f
 #define ATMOSPHERIC_PRESSURE (RAY_CAST ? (-2000.0f) : (1.f))
-#define GAUSS_ITERATIONS 3
+#define GAUSS_ITERATIONS 1
 
 #define BLOCK_SIZE 128
 #define BLOCKS_PARTICLES ((NUM_MARKER_PARTICLES + BLOCK_SIZE - 1) / BLOCK_SIZE)
@@ -68,6 +69,7 @@ static MarkerParticle* markerParticles;
 
 static int* dev_particleIds;
 static int* particleIds;
+static unsigned char* dev_waterTexture;
 
 static Grid* grids;
 static int MAX_GRID_LEVEL;
