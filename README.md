@@ -47,16 +47,11 @@ When rendered using OpenGL points instead of raycasting, we can simulate **10.2 
 3. Launch ray cast kernel for each pixel
 4. Check hierarchy for possible water particle collisions
 5. Compute ray-sphere intersections for those particles
-6. Use depth and normals to color the closest intersection
-7. Fill a pbo to display with OpenGL
 
 ##### Shading
 
-1. Ray trace kernel for each pixel
-4. Check hierarchy for possible water particle collisions
-5. Compute ray-sphere intersections for those particles
-6. Use depth and normals to color the result
-7. Fill a pbo to display with OpenGL
+1. Use depth and normals to color the closest intersection
+2. Fill a pbo to display with OpenGL
 
 ![Raycast Demo](img/raycast2.gif)
 
