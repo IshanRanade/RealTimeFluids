@@ -36,7 +36,7 @@ struct Camera {
 		resolution.x = width;
 		resolution.y = height;
 
-		position = glm::vec3(-lookAtPosition.x * 0.7f, -lookAtPosition.y * 0.5f, -lookAtPosition.z * 0.7f);
+		position = glm::vec3(-lookAtPosition.x * 0.5f, -lookAtPosition.y * 0.5f, -lookAtPosition.z * 0.5f);
 		lookAt = glm::vec3(lookAtPosition.x / 2.0f, lookAtPosition.y / 5.0f, lookAtPosition.z / 2.0f);
 		up = glm::vec3(0, 1, 0);
         zoom = glm::length(position - lookAt);

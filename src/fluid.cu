@@ -180,118 +180,119 @@ __global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* partic
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
     const int idy = blockIdx.y * blockDim.y + threadIdx.y;
 
-    if (idx < camera.resolution.x && idy < camera.resolution.y) {
-        // Setup variables
-        bool intersected = false;
-        glm::vec3 rayPos = camera.position;
-        float tMin = 999999.0f;
-        const glm::vec3 view = camera.view;
-        const glm::vec3 up = camera.up;
-        const glm::vec3 right = camera.right;
-        glm::vec3 normal = glm::vec3(0, 1, 0);
+	if (idx >= camera.resolution.x && idy >= camera.resolution.y)
+		return;
+
+    // Setup variables
+    bool intersected = false;
+    glm::vec3 rayPos = camera.position;
+    float tMin = 999999.0f;
+    const glm::vec3 view = camera.view;
+    const glm::vec3 up = camera.up;
+    const glm::vec3 right = camera.right;
+    glm::vec3 normal = glm::vec3(0, 1, 0);
         
-        const glm::vec3 rayDir = glm::normalize(view
-            - right * camera.pixelLength.x * ((float)idx - camera.resolution.x * 0.5f)
-            - up * camera.pixelLength.y * ((float)idy - camera.resolution.y * 0.5f)
-        );
+    const glm::vec3 rayDir = glm::normalize(view
+        - right * camera.pixelLength.x * ((float)idx - camera.resolution.x * 0.5f)
+        - up * camera.pixelLength.y * ((float)idy - camera.resolution.y * 0.5f)
+    );
 
 #if QUAD_TREE
-        // Quad tree traversal
-        int nextOffset = 0;
-        int currentNode = 0;
-        int nodesToVisit[32];
+    // Quad tree traversal
+    int nextOffset = 0;
+    int currentNode = 0;
+    int nodesToVisit[32];
 
-        while(true) {
-            LinearNode& node = tree[currentNode];
-            const float boundsT = boundsIntersectionTest(node.bounds, rayPos, rayDir);
-            if(boundsT > 0 && boundsT < tMin) {
-                if(node.particleCount > 0) {
-                    for (int i = 0; i < node.particleCount; ++i) {
-                        const int particleId = particleIds[node.particlesOffset + i];
-                        const float t = raySphereIntersect(rayPos, rayDir, particles[particleId].worldPosition, PARTICLE_RADIUS_SQUARE);
-						if (t > 0 && t < tMin) {
-							intersected = true;
-                            normal = glm::normalize(rayPos + (rayDir * t) - particles[particleId].worldPosition);
-							tMin = t;
-						}
-                    }
-                    if (nextOffset == 0) break;
-                    currentNode = nodesToVisit[--nextOffset];
-                } else if (node.particleCount == -1) {
-                    nodesToVisit[nextOffset++] = node.childOffset[0];
-                    nodesToVisit[nextOffset++] = node.childOffset[1];
-                    nodesToVisit[nextOffset++] = node.childOffset[2];
-                    currentNode = currentNode + 1;
+    while(true) {
+        LinearNode& node = tree[currentNode];
+        const float boundsT = boundsIntersectionTest(node.bounds, rayPos, rayDir);
+        if(boundsT > 0 && boundsT < tMin) {
+            if(node.particleCount > 0) {
+                for (int i = 0; i < node.particleCount; ++i) {
+                    const int particleId = particleIds[node.particlesOffset + i];
+                    const float t = raySphereIntersect(rayPos, rayDir, particles[particleId].worldPosition, PARTICLE_RADIUS_SQUARE);
+					if (t > 0 && t < tMin) {
+						intersected = true;
+                        //normal = glm::normalize(rayPos + (rayDir * t) - particles[particleId].worldPosition);
+						tMin = t;
+					}
                 }
-            } else {
                 if (nextOffset == 0) break;
                 currentNode = nodesToVisit[--nextOffset];
+            } else if (node.particleCount == -1) {
+                nodesToVisit[nextOffset++] = node.childOffset[0];
+                nodesToVisit[nextOffset++] = node.childOffset[1];
+                nodesToVisit[nextOffset++] = node.childOffset[2];
+                currentNode = currentNode + 1;
             }
+        } else {
+            if (nextOffset == 0) break;
+            currentNode = nodesToVisit[--nextOffset];
         }
+    }
 #else
-        // Ray-Sphere Intersection with all particles
-        for (int i = 0; i < numParticles; ++i) {
-            MarkerParticle& particle = particles[i];
+    // Ray-Sphere Intersection with all particles
+    for (int i = 0; i < numParticles; ++i) {
+        MarkerParticle& particle = particles[i];
 
-            float t = raySphereIntersect(rayPos, rayDir, particle.worldPosition, PARTICLE_RADIUS);
-            if (t > 0 && t < tMin) {
-                intersected = true;
-                tMin = t;
-                normal = glm::normalize(rayPos + (rayDir * t) - particle.worldPosition);
-            }
+        float t = raySphereIntersect(rayPos, rayDir, particle.worldPosition, PARTICLE_RADIUS);
+        if (t > 0 && t < tMin) {
+            intersected = true;
+            tMin = t;
+            normal = glm::normalize(rayPos + (rayDir * t) - particle.worldPosition);
         }
+    }
 #endif
-        rayPos += rayDir * tMin;
+    rayPos += rayDir * tMin;
         
-        const int index = idx + idy * camera.resolution.x;
-		const glm::vec3 clearColor = glm::vec3(245.0f, 245.0f, 220.0f);
+    const int index = idx + idy * camera.resolution.x;
+	const glm::vec3 clearColor = glm::vec3(245.0f, 245.0f, 220.0f);
 
-        // Set the color
-        if (intersected) {
-            // Ray hit a marker particle
-            glm::vec3 color = glm::vec3(0, 133.f, 164.f);
-			float height = (rayPos.y / GRID_Y);
-			color =  height * color + (1.f - height) * glm::vec3(0, 60.f, 81.f);
+    // Set the color
+    if (intersected) {
+        // Ray hit a marker particle
+        glm::vec3 color = glm::vec3(0, 133.f, 164.f);
+		float height = (rayPos.y / GRID_Y);
+		color =  height * color + (1.f - height) * glm::vec3(0, 60.f, 81.f);
 
-            // Debug velocity color
-            //color = glm::abs(cells[getCellCompressedIndex(rayPos.x, rayPos.y, rayPos.z, GRID_X, GRID_Y)].velocity) * 40.0f;
+        // Debug velocity color
+        //color = glm::abs(cells[getCellCompressedIndex(rayPos.x, rayPos.y, rayPos.z, GRID_X, GRID_Y)].velocity) * 40.0f;
 
-            //float fresnel = glm::clamp(1.0f - glm::dot(normal, -rayPos), 0.0f, 1.0f);
-            //fresnel = glm::pow(fresnel, 3.0f) * 0.65f;
-            //color = fresnel * color + (1.0f - fresnel) * clearColor;
+        //float fresnel = glm::clamp(1.0f - glm::dot(normal, -rayPos), 0.0f, 1.0f);
+        //fresnel = glm::pow(fresnel, 3.0f) * 0.65f;
+        //color = fresnel * color + (1.0f - fresnel) * clearColor;
 
 #if BLINN_PHONG
-			const int normalX = (rayPos.x * (512.0f / GRID_X));
-			const int normalZ = (rayPos.z * rayPos.y * (512.0f / GRID_Z / GRID_Y));
-			const int normalId = 3 * (normalX + 512 * normalZ);
-			normal = glm::normalize(glm::vec3(waterTex[normalId], waterTex[normalId + 2], waterTex[normalId + 1]));
-            const glm::vec3 lightPos = glm::vec3(2, 1, 0);
-            const float roughness = 10.0f;
+		const int normalX = (rayPos.x * (512.0f / GRID_X));
+		const int normalZ = (rayPos.z * rayPos.y * (512.0f / GRID_Z / GRID_Y));
+		const int normalId = 3 * (normalX + 512 * normalZ);
+		normal = glm::normalize(glm::vec3(waterTex[normalId], waterTex[normalId + 2], waterTex[normalId + 1]));
+        const glm::vec3 lightPos = glm::vec3(2, 1, 2);
+        const float power = 10.0f;
 
-            const glm::vec3 refl = glm::normalize(glm::normalize(camera.position - rayPos) + glm::normalize(lightPos));
-            const float specularTerm = glm::pow(glm::max(glm::dot(refl, normal), 0.0f), roughness);
+        const glm::vec3 refl = glm::normalize(glm::normalize(camera.position - rayPos) + glm::normalize(lightPos));
+        const float specularTerm = glm::pow(glm::max(glm::dot(refl, normal), 0.0f), power);
 
-            color = color * (1.0f + specularTerm);
+        color = color * (1.0f + specularTerm);
 #endif
 
 #if QUAD_TREE
-			const float tMax = boundsIntersectionTest(tree[0].bounds, camera.position, rayDir, false);
-            const float depth = glm::min((tMax - tMin) * 0.2f, 1.0f);
-            color = depth * color + (1.0f - depth) * clearColor;
+		const float tMax = boundsIntersectionTest(tree[0].bounds, camera.position, rayDir, false);
+        const float depth = glm::min((tMax - tMin) * 0.2f, 1.0f);
+        color = depth * color + (1.0f - depth) * clearColor;
 #endif
 
-            pbo[index].x = glm::min(color.x, 255.0f);
-            pbo[index].y = glm::min(color.y, 255.0f);
-            pbo[index].z = glm::min(color.z, 255.0f);
-            pbo[index].w = 0;
-        }
-        else {
-            // Clear background
-            pbo[index].x = clearColor.x;
-            pbo[index].y = clearColor.y;
-            pbo[index].z = clearColor.z;
-            pbo[index].w = 0;
-        }
+        pbo[index].x = glm::min(color.x, 255.0f);
+        pbo[index].y = glm::min(color.y, 255.0f);
+        pbo[index].z = glm::min(color.z, 255.0f);
+        pbo[index].w = 0;
+    }
+    else {
+        // Clear background
+        pbo[index].x = clearColor.x;
+        pbo[index].y = clearColor.y;
+        pbo[index].z = clearColor.z;
+        pbo[index].w = 0;
     }
 }
 
@@ -1194,7 +1195,6 @@ void iterateSim() {
     checkCUDAError("setup pressure calc failed");
     cudaDeviceSynchronize();
 
-	//int GAUSS_SEIDEL_BLOCKS = 
     // Gauss Seidel Pressure Solver
 	memset(vecX, 0.0f, NUM_CELLS * sizeof(float));
 	cudaMemcpy(valA, grids[0].dev_valA, NUM_CELLS * 7 * sizeof(float), cudaMemcpyDeviceToHost);
