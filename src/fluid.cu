@@ -842,6 +842,7 @@ void gaussSeidelPressureCPU(int numCells, float* valA, int* colIndA, float* vecX
             if (colIndA[i * 6 + j] != -1)
                 numerator -= valA[i * 7 + j + 1] * vecX[colIndA[i * 6 + j]];
         }
+
         vecX[i] = numerator / valA[i * 7];
     }
 }
@@ -1013,7 +1014,13 @@ __global__ void extrapolateFluidVelocities(int numCells, GridCell* cells, int la
 			}
 
 			cell.layer = layer;
-			cell.tempVelocity = (averageVelocity + cell.velocity) / (float(count) + 1.0f);
+
+			if (count == 0) {
+				cell.tempVelocity = cell.velocity;
+			}
+			else {
+				cell.tempVelocity = (averageVelocity) / (float(count));
+			}
 		}
 		else {
 			cell.tempVelocity = cell.velocity;
@@ -1194,9 +1201,10 @@ void iterateSim() {
 	cudaMemcpy(colIndA, grids[0].dev_colIndA, NUM_CELLS * 6 * sizeof(int), cudaMemcpyDeviceToHost);
 	cudaMemcpy(vecB, grids[0].dev_B, NUM_CELLS * sizeof(float), cudaMemcpyDeviceToHost);
     for (int i = 0; i < GAUSS_ITERATIONS; ++i) {
-		//printf("%d: %f\n", i, vecX[232]);
+		//printf("%d: %f\n", i, vecX[1]);
         gaussSeidelPressureCPU(NUM_CELLS, valA, colIndA, vecX, vecB);
     }
+	//printf("\n\n\n");
 	cudaMemcpy(grids[0].dev_X, vecX, NUM_CELLS * sizeof(float), cudaMemcpyHostToDevice);
 
     // Copy pressure to cells
