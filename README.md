@@ -30,7 +30,7 @@ An open-source repository featuring **real-time Eulerian fluid simulation and re
 7. Velocity fluid/solid extrapolation
 8. Move marker particles using cell velocity interpolation
 
-![Simulation Demo](img/simulation.gif)
+![Simulation Demo](img/opengl.gif)
 
 ##### Performance
 
