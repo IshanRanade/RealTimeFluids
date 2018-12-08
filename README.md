@@ -30,13 +30,13 @@ An open-source repository featuring **real-time Eulerian fluid simulation and re
 7. Velocity fluid/solid extrapolation
 8. Move marker particles using cell velocity interpolation
 
-![Simulation Demo](img/simulation.gif)
+![Simulation Demo](img/opengl.gif)
 
 ##### Performance
 
 When rendered using OpenGL points instead of raycasting, we can simulate **10.2 million particles** in real-time as shown in the gif above. The graph below shows how the number of particles affects framerate for a 16x32x16 resolution grid.
 
-![Simulation Performance](img/simperformance.gif)
+![Simulation Performance](img/simperformance.png)
 
 ### Rendering
 
@@ -59,7 +59,7 @@ When rendered using OpenGL points instead of raycasting, we can simulate **10.2 
 
 When rendered using accelerated raycasting, we can simulate **64 thousand particles** in real-time as shown in the gif above. The graph below shows how the maximum hierarchy depth affects framerate for a 16x32x16 resolution grid.
 
-![Ray Cast Performance](img/rayperformance.gif)
+![Ray Cast Performance](img/rayperformance.png)
 
 ### Build and Run
 
