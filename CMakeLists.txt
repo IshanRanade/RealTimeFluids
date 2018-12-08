@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.1)
 
-project(cis565_rasterizer)
+project(real_time_fluids)
 
 set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
 
@@ -82,25 +82,26 @@ set(CUDA_ATTACH_VS_BUILD_RULE_TO_CUDA_FILE ON)
 set(CUDA_SEPARABLE_COMPILATION ON)
 
 #add_subdirectory(stream_compaction)  # TODO: uncomment if using your own stream compaction
-add_subdirectory(src)
-add_subdirectory(util)
+cuda_add_library(src
+    "src/app.h"
+	"src/app.cpp"
+	"src/fluid.h"
+	"src/fluid.cu"
+	"src/shaders/basic.vertex.glsl"
+	"src/shaders/basic.frag.glsl"
+	"src/hierarchy.cpp"
+	"src/hierarchy.h"
+	"src/lodepng.h"
+	"src/lodepng.cpp"
+    OPTIONS -arch=sm_60
+    )
 
 cuda_add_executable(${CMAKE_PROJECT_NAME}
-    "src/main.hpp"
     "src/main.cpp"
     )
 
 target_link_libraries(${CMAKE_PROJECT_NAME}
     src
-    util
     #stream_compaction  # TODO: uncomment if using your own stream compaction
     ${CORELIBS}
-    )
-
-add_custom_command(
-    TARGET ${CMAKE_PROJECT_NAME}
-    POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        ${CMAKE_SOURCE_DIR}/shaders
-        ${CMAKE_BINARY_DIR}/shaders
     )
