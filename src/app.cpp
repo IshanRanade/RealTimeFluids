@@ -139,16 +139,18 @@ void App::start() {
 	seconds = time(NULL);
 
 	while (!glfwWindowShouldClose(window)) {
-		if(refresh) {
+		if (refresh) {
 			restartSim();
 			refresh = false;
+			camera->phi = 2.34f;
+			lastX = 400.0f;
+		} else {
+			camera->phi -= (-1.f) / width;
+			lastX -= 1.f;
 		}
-
-		camera->phi -= (-1.f) / width;
-		lastX -= 1.f;
 		camera->update();
 
-		time_t seconds2 = time(NULL);
+		const time_t seconds2 = time(NULL);
 		if (difftime(seconds2, seconds) >= 0.5f) {
 			fps = fpstracker / difftime(seconds2, seconds);
 			fpstracker = 0;

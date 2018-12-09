@@ -54,16 +54,18 @@ __device__ glm::vec3 getCellUncompressedCoordinates(int index, int gridX, int gr
     return glm::vec3(x, y, z);
 }
 
-__global__ void fillVBOData(int n, void *vbo, MarkerParticle *particles, GridCell *cells) {
+
+//
+//	RAYCAST RENDERING
+//
+
+__global__ void fillVBOData(int n, void *vbo, MarkerParticle *particles) {
     const int index = blockIdx.x * blockDim.x + threadIdx.x;
 
     float *vboFloat = (float*)vbo;
 
     if (index < n) {
         MarkerParticle &particle = particles[index];
-
-		int cellIndex = getCellCompressedIndex(particle.worldPosition.x, particle.worldPosition.y, particle.worldPosition.z, GRID_X, GRID_Y);
-		GridCell &cell = cells[cellIndex];
 
         // Set the position
         vboFloat[6 * index + 0] = particle.worldPosition.x;
@@ -73,14 +75,16 @@ __global__ void fillVBOData(int n, void *vbo, MarkerParticle *particles, GridCel
         // Set the color
 		glm::vec3 color = glm::vec3(0.2f, 0.2f, 1.0f);
 
-		if (cellIndex < NUM_CELLS) {
-			//color = glm::abs(cell.velocity) * 40.0f;
-		}
-
         vboFloat[6 * index + 3] = color.x;
         vboFloat[6 * index + 4] = color.y;
         vboFloat[6 * index + 5] = color.z;
     }
+}
+
+void fillVBOsWithMarkerParticles(void *vbo) {
+	fillVBOData << <BLOCKS_PARTICLES, BLOCK_SIZE >> > (NUM_MARKER_PARTICLES, vbo, dev_markerParticles);
+	checkCUDAError("filling VBOs with marker particle data failed");
+	cudaDeviceSynchronize();
 }
 
 // Quadratic solver from scratchapixel.com
@@ -154,7 +158,7 @@ __device__ float raySphereIntersect(glm::vec3 rayPos, glm::vec3 rayDir, glm::vec
     return t0;
 }
 
-#if 0
+#if 1
 __device__ float smin(float a, float b, float k) {
     const float h = glm::clamp(0.5f + 0.5f * (b - a) / k, 0.0f, 1.0f);
     return glm::mix(b, a, h) - k * h * (1.0f - h);
@@ -174,6 +178,36 @@ __device__ bool inBounds(const glm::vec3 min, const glm::vec3 max, const glm::ve
     return (pos.x >= min.x && pos.x <= max.x &&
         pos.y >= min.y && pos.y <= max.y &&
         pos.z >= min.z && pos.z <= max.z);
+}
+
+__global__ void checkParticlesToRender(int* particleIds, MarkerParticle* particles, GridCell* cells) {
+	const int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+	if (index >= NUM_MARKER_PARTICLES)
+		return;
+
+	const glm::vec3 cellPos = particles[index].worldPosition;
+	for (int d = 0; d < 6; ++d) {
+		const int x = d == 0 ? -1 : d == 1 ? 1 : 0;
+		const int y = d == 2 ? -1 : d == 3 ? 1 : 0;
+		const int z = d == 4 ? -1 : d == 5 ? 1 : 0;
+		/*for (int x = -1; x < 1; ++x) {
+			for (int y = -1; y < 1; ++y) {
+				for (int z = -1; z < 1; ++z) {*/
+		const int cellId = getCellCompressedIndex(cellPos.x + x, cellPos.y + y, cellPos.z + z, GRID_X, GRID_Y);
+
+		if (inBounds(glm::vec3(0), glm::vec3(GRID_X, GRID_Y, GRID_Z), cellPos + glm::vec3(x, y, z))) {
+			if (cells[cellId].cellType == AIR) {
+				particleIds[index] = index;
+				return;
+			}
+		}
+		else {
+			particleIds[index] = index;
+			return;
+		}
+	}
+	particleIds[index] = -1;
 }
 
 __global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* particles, Camera camera, LinearNode* tree, int* particleIds, unsigned char* waterTex) {
@@ -213,7 +247,7 @@ __global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* partic
                     const float t = raySphereIntersect(rayPos, rayDir, particles[particleId].worldPosition, PARTICLE_RADIUS_SQUARE);
 					if (t > 0 && t < tMin) {
 						intersected = true;
-                        //normal = glm::normalize(rayPos + (rayDir * t) - particles[particleId].worldPosition);
+                        normal = glm::normalize(rayPos + (rayDir * t) - particles[particleId].worldPosition);
 						tMin = t;
 					}
                 }
@@ -296,36 +330,6 @@ __global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* partic
     }
 }
 
-__global__ void checkParticlesToRender(int* particleIds, MarkerParticle* particles, GridCell* cells) {
-    const int index = blockIdx.x * blockDim.x + threadIdx.x;
-
-    if (index >= NUM_MARKER_PARTICLES)
-        return;
-
-    const glm::vec3 cellPos = particles[index].worldPosition;
-    for (int d = 0; d < 6; ++d) {
-        const int x = d == 0 ? -1 : d == 1 ? 1 : 0;
-        const int y = d == 2 ? -1 : d == 3 ? 1 : 0;
-        const int z = d == 4 ? -1 : d == 5 ? 1 : 0;
-	/*for (int x = -1; x < 1; ++x) {
-		for (int y = -1; y < 1; ++y) {
-			for (int z = -1; z < 1; ++z) {*/
-		const int cellId = getCellCompressedIndex(cellPos.x + x, cellPos.y + y, cellPos.z + z, GRID_X, GRID_Y);
-
-		if (inBounds(glm::vec3(0), glm::vec3(GRID_X, GRID_Y, GRID_Z), cellPos + glm::vec3(x, y, z))) {
-			if (cells[cellId].cellType == AIR) {
-				particleIds[index] = index;
-				return;
-			}
-		}
-		else {
-			particleIds[index] = index;
-			return;
-		}
-    }
-    particleIds[index] = -1;
-}
-
 void raycastPBO(uchar4* pbo, Camera camera) {
 #if QUAD_TREE
     // Initialize flat 3D quad tree hierarchy
@@ -369,6 +373,10 @@ void raycastPBO(uchar4* pbo, Camera camera) {
     cudaDeviceSynchronize();
 }
 
+//
+//	FLUID SIMULATION
+//
+
 __global__ void setAllGridCellsToAir(int n, GridCell *cells) {
     const int index = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -405,12 +413,6 @@ __global__ void setGridCellsWithMarkerParticleToFluid(int n, GridCell* cells, Ma
             }
         }*/
     }
-}
-
-void fillVBOsWithMarkerParticles(void *vbo) {
-    fillVBOData << <BLOCKS_PARTICLES, BLOCK_SIZE >> > (NUM_MARKER_PARTICLES, vbo, dev_markerParticles, dev_gridCells);
-    checkCUDAError("filling VBOs with marker particle data failed");
-    cudaDeviceSynchronize();
 }
 
 __global__ void generateRandomWorldPositionsForParticles(MarkerParticle *particles) {
@@ -589,11 +591,11 @@ __global__ void moveMarkerParticlesThroughField(int n, GridCell *cells, MarkerPa
         MarkerParticle &particle = particles[index];
 
         // Find the cell that this particle is in
-        int cellIndex = getCellCompressedIndex(particle.worldPosition.x, particle.worldPosition.y, particle.worldPosition.z, GRID_X, GRID_Y);
+		const int cellIndex = getCellCompressedIndex(particle.worldPosition.x, particle.worldPosition.y, particle.worldPosition.z, GRID_X, GRID_Y);
         
-		glm::vec3 interpolatedVelocity = getInterpolatedVelocity(cellIndex, particle.worldPosition, cells);
+		const glm::vec3 interpolatedVelocity = getInterpolatedVelocity(cellIndex, particle.worldPosition, cells);
 
-		glm::vec3 rungeKuttaPosition = particle.worldPosition + (TIME_STEP / 2.0f) * interpolatedVelocity;
+		const glm::vec3 rungeKuttaPosition = particle.worldPosition + (TIME_STEP / 2.0f) * interpolatedVelocity;
 
 		glm::vec3 newVelocity;
 		if (rungeKuttaPosition.x < 0 || rungeKuttaPosition.x >= GRID_X || rungeKuttaPosition.y < 0 || rungeKuttaPosition.y >= GRID_Y || rungeKuttaPosition.z < 0 || rungeKuttaPosition.z >= GRID_Z) {
