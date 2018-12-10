@@ -247,7 +247,7 @@ __global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* partic
                     const float t = raySphereIntersect(rayPos, rayDir, particles[particleId].worldPosition, PARTICLE_RADIUS_SQUARE);
 					if (t > 0 && t < tMin) {
 						intersected = true;
-                        normal = glm::normalize(rayPos + (rayDir * t) - particles[particleId].worldPosition);
+                        //normal = glm::normalize(rayPos + (rayDir * t) - particles[particleId].worldPosition);
 						tMin = t;
 					}
                 }
@@ -307,7 +307,10 @@ __global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* partic
         const glm::vec3 refl = glm::normalize(glm::normalize(camera.position - rayPos) + glm::normalize(lightPos));
         const float specularTerm = glm::pow(glm::max(glm::dot(refl, normal), 0.0f), power);
 
-        color = color * (1.0f + specularTerm);
+		if (specularTerm > 0.97f)
+			color = glm::vec3(255.f);
+		else
+			color = color * (1.0f + specularTerm);
 #endif
 
 #if QUAD_TREE
@@ -1225,7 +1228,7 @@ void iterateSim() {
 
 
 	// Extrapolate fluid velocities into surrounding cells
-	for (int i = 1; i < 5; i++) {
+	for (int i = 1; i < EXTRAPOLATE_ITERATIONS; i++) {
 		extrapolateFluidVelocities << <BLOCKS_CELLS, BLOCK_SIZE >> > (NUM_CELLS, dev_gridCells, i);
 		checkCUDAError("extrapolating velocities failed");
 		cudaDeviceSynchronize();
