@@ -45,12 +45,12 @@ void App::initGL() {
 	GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
 	GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
 
-	std::string vertexShaderFilename = std::string("../src/shaders/basic.vertex.glsl");
-	std::string vertexShaderSourceString = readFileAsString(vertexShaderFilename);
+	const std::string vertexShaderFilename = std::string("../src/shaders/basic.vertex.glsl");
+	const std::string vertexShaderSourceString = readFileAsString(vertexShaderFilename);
 	const char *vertexShaderSource = vertexShaderSourceString.c_str();
 
-	std::string fragmentShaderFilename = std::string("../src/shaders/basic.frag.glsl");
-	std::string fragmentShaderSourceString = readFileAsString(fragmentShaderFilename);
+	const std::string fragmentShaderFilename = std::string("../src/shaders/basic.frag.glsl");
+	const std::string fragmentShaderSourceString = readFileAsString(fragmentShaderFilename);
 	const char *fragmentShaderSource = fragmentShaderSourceString.c_str();
 
 	// Compile the vertex shader

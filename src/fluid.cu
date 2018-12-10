@@ -89,18 +89,18 @@ void fillVBOsWithMarkerParticles(void *vbo) {
 
 // Quadratic solver from scratchapixel.com
 __device__ bool solveQuadratic(const float &a, const float &b, const float &c, float &x0, float &x1) {
-    float discr = b * b - 4 * a * c;
+	const float discr = b * b - 4 * a * c;
     if (discr < 0) return false;
     else if (discr == 0) x0 = x1 = -0.5 * b / a;
     else {
-        float q = (b > 0) ?
+        const float q = (b > 0) ?
             -0.5 * (b + sqrt(discr)) :
             -0.5 * (b - sqrt(discr));
         x0 = q / a;
         x1 = c / q;
     }
     if (x0 > x1) {
-        float temp = x0;
+		const float temp = x0;
         x0 = x1;
         x1 = temp;
     }
@@ -114,12 +114,12 @@ __device__ float boundsIntersectionTest(Bounds b, glm::vec3 rayPos, glm::vec3 ra
     float tmax = 999999.f;
 
     for (int axis = 0; axis < 3; ++axis) {
-        float axisDir = rayDir[axis];
+		const float axisDir = rayDir[axis];
         if (axisDir != 0) {
-            float t1 = (b.min[axis] - rayPos[axis]) / axisDir;
-            float t2 = (b.max[axis] - rayPos[axis]) / axisDir;
-            float ta = glm::min(t1, t2);
-            float tb = glm::max(t1, t2);
+			const float t1 = (b.min[axis] - rayPos[axis]) / axisDir;
+			const float t2 = (b.max[axis] - rayPos[axis]) / axisDir;
+			const float ta = glm::min(t1, t2);
+			const float tb = glm::max(t1, t2);
             if (ta > 0 && ta > tmin)
                 tmin = ta;
             if (tb < tmax)
@@ -138,14 +138,14 @@ __device__ float raySphereIntersect(glm::vec3 rayPos, glm::vec3 rayDir, glm::vec
     float t0, t1; // solutions for t if the ray intersects
 
     // analytic solution
-    glm::vec3 L = rayPos - center;
-    float a = glm::dot(rayDir, rayDir);
-    float b = 2 * glm::dot(rayDir, L);
-    float c = glm::dot(L, L) - radius2;
+	const glm::vec3 L = rayPos - center;
+	const float a = glm::dot(rayDir, rayDir);
+	const float b = 2 * glm::dot(rayDir, L);
+	const float c = glm::dot(L, L) - radius2;
     if (!solveQuadratic(a, b, c, t0, t1)) return -1.0f;
 
     if (t0 > t1) {
-        float temp = t0;
+		const float temp = t0;
         t0 = t1;
         t1 = temp;
     }
@@ -736,7 +736,7 @@ __global__ void setupPressureCalc(Grid grid, GridCell* cells) {
 
     const glm::vec3 cellPos = getCellUncompressedCoordinates(index, grid.sizeX, grid.sizeY);
 
-    float nonSolid = 1.0f;
+    float nonSolid = 1.5f;
     float airCells = 0.0f;
     for (int i = 0; i < 6; ++i) {
         const int x = i == 0 ? -1 : i == 1 ? 1 : 0;

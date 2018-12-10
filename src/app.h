@@ -75,8 +75,8 @@ class App {
 public:
 	App();
 
-	int width = 800;
-	int height = 800;
+	int width = 640;
+	int height = 640;
 
 	float fps;
 	float fpstracker;

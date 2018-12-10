@@ -35,7 +35,7 @@ static struct Grid {
     int sizeX, sizeY, sizeZ, numCells;
 };
 
-#define RAY_CAST 1
+#define RAY_CAST 0
 #define BLINN_PHONG 1
 #define TIME_STEP (1.0f / 30.0f)
 
@@ -47,7 +47,7 @@ static struct Grid {
 #define CELL_WIDTH 1.0f
 #define WIDTH_DIV_TIME (CELL_WIDTH / TIME_STEP)
 
-#define NUM_MARKER_PARTICLES (NUM_CELLS * 8)//(RAY_CAST ? (NUM_CELLS / 2) : 8000000)
+#define NUM_MARKER_PARTICLES (NUM_CELLS * 5000)//(RAY_CAST ? (NUM_CELLS / 2) : 8000000)
 #define PARTICLE_RADIUS (RAY_CAST ? 0.1f : 0.1f)
 #define PARTICLE_RADIUS_SQUARE (PARTICLE_RADIUS * PARTICLE_RADIUS)
 #define METABALL_RADIUS (PARTICLE_RADIUS * 2.0f)
@@ -59,8 +59,8 @@ static struct Grid {
 #define FLUID_DENSITY 100.0f
 #define AIR_DENSITY 1.225f
 #define ATMOSPHERIC_PRESSURE (RAY_CAST ? (-2000.0f) : (-1000.0f))
-#define GAUSS_ITERATIONS 5
-#define EXTRAPOLATE_ITERATIONS 4
+#define GAUSS_ITERATIONS 7
+#define EXTRAPOLATE_ITERATIONS 3
 
 #define BLOCK_SIZE 128
 #define BLOCKS_PARTICLES ((NUM_MARKER_PARTICLES + BLOCK_SIZE - 1) / BLOCK_SIZE)
