@@ -34,7 +34,7 @@ An open-source repository featuring **real-time Eulerian fluid simulation and re
 
 ##### Performance
 
-When rendered using OpenGL points instead of raycasting, we can simulate **10.2 million particles** in real-time as shown in the gif above. The graph below shows how the number of particles affects framerate for a 16x32x16 resolution grid.
+When rendered using OpenGL points instead of raycasting, we can simulate **21 million particles in 60fps** as shown in the gif above. The graph below shows how the number of particles affects framerate for a 16x16x16 resolution grid.
 
 ![Simulation Performance](img/simperformance.png)
 
@@ -43,21 +43,23 @@ When rendered using OpenGL points instead of raycasting, we can simulate **10.2 
 ##### Ray Casting
 
 1. Cull particles below the surface and boundaries
-2. Create quad tree hierarchy for marker particles (CPU
+2. Create quad tree hierarchy for marker particles (CPU)
 3. Launch ray cast kernel for each pixel
 4. Check hierarchy for possible water particle collisions
 5. Compute ray-sphere intersections for those particles
 
 ##### Shading
 
-1. Use depth and normals to color the closest intersection
-2. Fill a pbo to display with OpenGL
+1. Color intersections by water height
+2. Texture mapped normals with Blinn-Phong shading
+3. Fade color by camera depth
+4. Display pbo pixel colors using OpenGL
 
 ![Raycast Demo](img/raycast2.gif)
 
 ##### Performance
 
-When rendered using accelerated raycasting, we can simulate **64 thousand particles** in real-time as shown in the gif above. The graph below shows how the maximum hierarchy depth affects framerate for a 16x32x16 resolution grid.
+When rendered using accelerated raycasting, we can simulate **33 thousand particles in 60fps** as shown in the gif above. The graph below shows how the maximum hierarchy depth affects framerate for a 16x16x16 resolution grid.
 
 ![Ray Cast Performance](img/rayperformance.png)
 
