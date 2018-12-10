@@ -73,7 +73,7 @@ __global__ void fillVBOData(int n, void *vbo, MarkerParticle *particles) {
         vboFloat[6 * index + 2] = particle.worldPosition.z;
 
         // Set the color
-		glm::vec3 color = glm::vec3(0.2f, 0.2f, 1.0f);
+		const glm::vec3 color = glm::vec3(0.2f, 0.2f, 1.0f);
 
         vboFloat[6 * index + 3] = color.x;
         vboFloat[6 * index + 4] = color.y;
@@ -93,14 +93,14 @@ __device__ bool solveQuadratic(const float &a, const float &b, const float &c, f
     if (discr < 0) return false;
     else if (discr == 0) x0 = x1 = -0.5 * b / a;
     else {
-        float q = (b > 0) ?
+        const float q = (b > 0) ?
             -0.5 * (b + sqrt(discr)) :
             -0.5 * (b - sqrt(discr));
         x0 = q / a;
         x1 = c / q;
     }
     if (x0 > x1) {
-        float temp = x0;
+        const float temp = x0;
         x0 = x1;
         x1 = temp;
     }
@@ -114,12 +114,12 @@ __device__ float boundsIntersectionTest(Bounds b, glm::vec3 rayPos, glm::vec3 ra
     float tmax = 999999.f;
 
     for (int axis = 0; axis < 3; ++axis) {
-        float axisDir = rayDir[axis];
+        const float axisDir = rayDir[axis];
         if (axisDir != 0) {
-            float t1 = (b.min[axis] - rayPos[axis]) / axisDir;
-            float t2 = (b.max[axis] - rayPos[axis]) / axisDir;
-            float ta = glm::min(t1, t2);
-            float tb = glm::max(t1, t2);
+            const float t1 = (b.min[axis] - rayPos[axis]) / axisDir;
+            const float t2 = (b.max[axis] - rayPos[axis]) / axisDir;
+            const float ta = glm::min(t1, t2);
+            const float tb = glm::max(t1, t2);
             if (ta > 0 && ta > tmin)
                 tmin = ta;
             if (tb < tmax)
@@ -138,14 +138,16 @@ __device__ float raySphereIntersect(glm::vec3 rayPos, glm::vec3 rayDir, glm::vec
     float t0, t1; // solutions for t if the ray intersects
 
     // analytic solution
-    glm::vec3 L = rayPos - center;
-    float a = glm::dot(rayDir, rayDir);
-    float b = 2 * glm::dot(rayDir, L);
-    float c = glm::dot(L, L) - radius2;
-    if (!solveQuadratic(a, b, c, t0, t1)) return -1.0f;
+    const glm::vec3 L = rayPos - center;
+    const float a = glm::dot(rayDir, rayDir);
+    const float b = 2 * glm::dot(rayDir, L);
+    const float c = glm::dot(L, L) - radius2;
+
+    if (!solveQuadratic(a, b, c, t0, t1))
+        return -1.0f;
 
     if (t0 > t1) {
-        float temp = t0;
+        const float temp = t0;
         t0 = t1;
         t1 = temp;
     }
@@ -158,7 +160,7 @@ __device__ float raySphereIntersect(glm::vec3 rayPos, glm::vec3 rayDir, glm::vec
     return t0;
 }
 
-#if 1
+#if 0
 __device__ float smin(float a, float b, float k) {
     const float h = glm::clamp(0.5f + 0.5f * (b - a) / k, 0.0f, 1.0f);
     return glm::mix(b, a, h) - k * h * (1.0f - h);
@@ -281,12 +283,27 @@ __global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* partic
         
     const int index = idx + idy * camera.resolution.x;
 	const glm::vec3 clearColor = glm::vec3(245.0f, 245.0f, 220.0f);
+    /*glm::vec3 clearColor;
+
+    if (idy > 260)
+        clearColor = glm::vec3(0, 133.f, 164.f);
+    else {
+        const float gradient = glm::min((1.0f * idy / camera.resolution.y) + 0.7f, 1.0f);
+        clearColor = gradient * glm::vec3(252, 107, 86) + (1.0f - gradient) * glm::vec3(200, 161, 54);
+        const float sunDist = glm::distance(glm::vec2(idx, idy), glm::vec2(400, 55));
+        if (sunDist < 15.0f) {
+            clearColor = glm::vec3(255.0f);
+        } else if (sunDist < 40.0f) {
+            const float sunGradient = (sunDist - 15.0f) / 25.0f;
+            clearColor = glm::vec3(255.0f) * (1.0f - sunGradient) + sunGradient * clearColor;
+        }
+    }*/
 
     // Set the color
     if (intersected) {
         // Ray hit a marker particle
         glm::vec3 color = glm::vec3(0, 133.f, 164.f);
-		float height = (rayPos.y / GRID_Y);
+		const float height = (rayPos.y / GRID_Y);
 		color =  height * color + (1.f - height) * glm::vec3(0, 60.f, 81.f);
 
         // Debug velocity color
@@ -307,10 +324,10 @@ __global__ void raycastPBO(int numParticles, uchar4* pbo, MarkerParticle* partic
         const glm::vec3 refl = glm::normalize(glm::normalize(camera.position - rayPos) + glm::normalize(lightPos));
         const float specularTerm = glm::pow(glm::max(glm::dot(refl, normal), 0.0f), power);
 
-		if (specularTerm > 0.97f)
+		/*if (specularTerm > 0.97f)
 			color = glm::vec3(255.f);
-		else
-			color = color * (1.0f + specularTerm);
+		else*/
+		color = color * (1.0f + specularTerm);
 #endif
 
 #if QUAD_TREE

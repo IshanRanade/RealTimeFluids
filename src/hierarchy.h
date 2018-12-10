@@ -7,7 +7,7 @@
 #include <vector>
 
 #define QUAD_TREE 1
-#define MAX_TREE_DEPTH 2
+#define MAX_TREE_DEPTH 4
 
 struct MarkerParticle;
 

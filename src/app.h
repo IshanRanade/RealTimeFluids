@@ -36,8 +36,8 @@ struct Camera {
 		resolution.x = width;
 		resolution.y = height;
 
-		position = glm::vec3(-lookAtPosition.x * 0.5f, -lookAtPosition.y * 0.5f, -lookAtPosition.z * 0.5f);
-		lookAt = glm::vec3(lookAtPosition.x / 2.0f, lookAtPosition.y / 5.0f, lookAtPosition.z / 2.0f);
+		position = glm::vec3(lookAtPosition.x * -0.2f, lookAtPosition.y * 0.9f, lookAtPosition.z * 0.48f);
+		lookAt = glm::vec3(lookAtPosition.x * 0.5f, lookAtPosition.y * 0.2f, lookAtPosition.z * 0.5f);
 		up = glm::vec3(0, 1, 0);
         zoom = glm::length(position - lookAt);
 
@@ -75,8 +75,8 @@ class App {
 public:
 	App();
 
-	int width = 800;
-	int height = 800;
+	int width = 480;
+	int height = 480;
 
 	float fps;
 	float fpstracker;

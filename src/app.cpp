@@ -143,12 +143,14 @@ void App::start() {
 			restartSim();
 			refresh = false;
 			camera->phi = 2.34f;
+            camera->theta = 0.96f;
 			lastX = 400.0f;
 		} else {
-			camera->phi -= (-1.f) / width;
-			lastX -= 1.f;
+			//camera->phi -= (-1.f) / width;
+			//lastX -= 1.f;
 		}
-		camera->update();
+        //printf("%f, %f, %f\n", camera->position.x, camera->position.y, camera->position.z);
+		//camera->update();
 
 		const time_t seconds2 = time(NULL);
 		if (difftime(seconds2, seconds) >= 0.5f) {

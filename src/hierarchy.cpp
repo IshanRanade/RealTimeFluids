@@ -15,7 +15,7 @@ TreeNode* buildTree(std::vector<int>& oldParticles, MarkerParticle* markerPartic
     std::vector<int>& particles = node->particles;
     if (currentDepth == 1) {
         particles = oldParticles;
-        yMin = 0.0f;
+        yMin = -10.0f;
         yMax = GRID_Y;
     } else {
         for (int i = 0; i < oldParticles.size(); i++) {
