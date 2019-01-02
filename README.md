@@ -55,13 +55,27 @@ When rendered using OpenGL points instead of raycasting, we can simulate **21 mi
 3. Fade color by camera depth
 4. Display pbo pixel colors using OpenGL
 
-![Raycast Demo](img/raycast2.gif)
+![Raycast Demo](img/sunset.gif)
 
 ##### Performance
 
 When rendered using accelerated raycasting, we can simulate **33 thousand particles in 60fps** as shown in the gif above. The graph below shows how the maximum hierarchy depth affects framerate for a 16x16x16 resolution grid.
 
 ![Ray Cast Performance](img/rayperformance.png)
+
+### Debug Views
+
+We used a few different debug coloring views to help us address issues with our simulation. The velocity view helps us debug particle movement continuity and locate regions of jitter. The colors correspond to velocity in each axis (y/green being up).
+
+![Velocity Debug](img/velocity.gif)
+
+The pressure view helps us locate regions of extreme pressure and debug boundary pressure conditions. Blue regions have higher pressure.
+
+![Pressure Debug](img/pressure.gif)
+
+The intersection view colors green/red based on the relative number of intersections at each pixel, which is directly proportional to the performance cost of each raycast.
+
+![Intersection Debug](img/intersections.gif)
 
 ### Build and Run
 
