@@ -59,7 +59,7 @@ When rendered using OpenGL points instead of raycasting, we can simulate **21 mi
 
 ##### Performance
 
-When rendered using accelerated raycasting, we can simulate **33 thousand particles in 60fps** as shown in the gif above. The graph below shows how the maximum hierarchy depth affects framerate for a 16x16x16 resolution grid.
+When rendered using accelerated raycasting, we can simulate **33 thousand particles in 60fps** as shown in the gif above. The graph below shows how the maximum hierarchy depth affects framerate for a 16x16x16 resolution grid. Note that optimal depth varies between 2-4 depending on particle count.
 
 ![Ray Cast Performance](img/rayperformance.png)
 
